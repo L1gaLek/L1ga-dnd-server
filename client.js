@@ -67,8 +67,8 @@ const worldPhasesBox = document.getElementById('world-phases');
 const envEditorBox = document.getElementById('env-editor');
 
 // ================== VARIABLES ==================
-// sbClient replaces our old Node/WebSocket server.
-// GitHub Pages hosts only static files; realtime + DB are handled by sbClient.
+// Supabase replaces our old Node/WebSocket server.
+// GitHub Pages hosts only static files; realtime + DB are handled by Supabase.
 let sbClient;
 let roomChannel;    // broadcast/presence channel (optional)
 let roomDbChannel;  // postgres_changes channel
@@ -104,13 +104,13 @@ joinBtn.addEventListener('click', () => {
     return;
   }
 
-  // ===== sbClient init (GitHub Pages) =====
-  if (!window.supabase || !window.supabase_URL || !window.supabase_ANON_KEY) {
-    loginError.textContent = "sbClient не настроен. Проверьте sbClient_URL и sbClient_ANON_KEY в index.html";
+  // ===== Supabase init (GitHub Pages) =====
+  if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+    loginError.textContent = "Supabase не настроен. Проверьте SUPABASE_URL и SUPABASE_ANON_KEY в index.html";
     return;
   }
 
-sbClient = window.supabase.createClient(window.supabase_URL, window.supabase_ANON_KEY);
+sbClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
   // stable identity (doesn't depend on nickname)
   const savedUserId = localStorage.getItem("dnd_user_id") || "";
@@ -123,14 +123,14 @@ sbClient = window.supabase.createClient(window.supabase_URL, window.supabase_ANO
   localStorage.setItem("dnd_user_id", String(userId));
   localStorage.setItem("dnd_user_role", String(role || ""));
 
-  // In sbClient-MVP our "myId" is stable localStorage userId
+  // In Supabase-MVP our "myId" is stable localStorage userId
   handleMessage({ type: "registered", id: userId, name, role });
 
   // list rooms from DB
   sendMessage({ type: 'listRooms' });
 });
 
-// ================== MESSAGE HANDLER (used by sbClient subscriptions) ==================
+// ================== MESSAGE HANDLER (used by Supabase subscriptions) ==================
 function handleMessage(msg) {
 
 // ===== Rooms lobby messages =====
@@ -1355,18 +1355,18 @@ function logEventToState(state, text) {
   if (state.log.length > 200) state.log.splice(0, state.log.length - 200);
 }
 
-async function ensuresbClientReady() {
+async function ensureSupabaseReady() {
   if (!sbClient) {
-    if (!window.supabase || !window.supabase_URL || !window.supabase_ANON_KEY) {
-      throw new Error("sbClient не настроен");
+    if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+      throw new Error("Supabase не настроен");
     }
-    sbClient = window.supabase.createClient(window.supabase_URL, window.supabase_ANON_KEY);
+    sbClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   }
   return sbClient;
 }
 
 async function upsertRoomState(roomId, nextState) {
-  await ensuresbClientReady();
+  await ensureSupabaseReady();
   const payload = {
     room_id: roomId,
     phase: String(nextState?.phase || "lobby"),
@@ -1379,7 +1379,7 @@ async function upsertRoomState(roomId, nextState) {
 }
 
 async function subscribeRoomDb(roomId) {
-  await ensuresbClientReady();
+  await ensureSupabaseReady();
   if (roomDbChannel) {
     try { await roomDbChannel.unsubscribe(); } catch {}
     roomDbChannel = null;
@@ -1413,7 +1413,7 @@ async function subscribeRoomDb(roomId) {
 
 async function sendMessage(msg) {
   try {
-    await ensuresbClientReady();
+    await ensureSupabaseReady();
     if (!msg || typeof msg !== "object") return;
 
     switch (msg.type) {
