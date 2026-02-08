@@ -67,9 +67,9 @@ const worldPhasesBox = document.getElementById('world-phases');
 const envEditorBox = document.getElementById('env-editor');
 
 // ================== VARIABLES ==================
-// Supabase replaces our old Node/WebSocket server.
-// GitHub Pages hosts only static files; realtime + DB are handled by Supabase.
-let supabase;
+// sbClient replaces our old Node/WebSocket server.
+// GitHub Pages hosts only static files; realtime + DB are handled by sbClient.
+let sbClient;
 let roomChannel;    // broadcast/presence channel (optional)
 let roomDbChannel;  // postgres_changes channel
 let myId;
@@ -104,13 +104,13 @@ joinBtn.addEventListener('click', () => {
     return;
   }
 
-  // ===== Supabase init (GitHub Pages) =====
-  if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
-    loginError.textContent = "Supabase не настроен. Проверьте SUPABASE_URL и SUPABASE_ANON_KEY в index.html";
+  // ===== sbClient init (GitHub Pages) =====
+  if (!window.supabase || !window.supabase_URL || !window.supabase_ANON_KEY) {
+    loginError.textContent = "sbClient не настроен. Проверьте sbClient_URL и sbClient_ANON_KEY в index.html";
     return;
   }
 
-supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+sbClient = window.supabase.createClient(window.supabase_URL, window.supabase_ANON_KEY);
 
   // stable identity (doesn't depend on nickname)
   const savedUserId = localStorage.getItem("dnd_user_id") || "";
@@ -123,14 +123,14 @@ supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANO
   localStorage.setItem("dnd_user_id", String(userId));
   localStorage.setItem("dnd_user_role", String(role || ""));
 
-  // In Supabase-MVP our "myId" is stable localStorage userId
+  // In sbClient-MVP our "myId" is stable localStorage userId
   handleMessage({ type: "registered", id: userId, name, role });
 
   // list rooms from DB
   sendMessage({ type: 'listRooms' });
 });
 
-// ================== MESSAGE HANDLER (used by Supabase subscriptions) ==================
+// ================== MESSAGE HANDLER (used by sbClient subscriptions) ==================
 function handleMessage(msg) {
 
 // ===== Rooms lobby messages =====
@@ -1355,18 +1355,18 @@ function logEventToState(state, text) {
   if (state.log.length > 200) state.log.splice(0, state.log.length - 200);
 }
 
-async function ensureSupabaseReady() {
-  if (!supabase) {
-    if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
-      throw new Error("Supabase не настроен");
+async function ensuresbClientReady() {
+  if (!sbClient) {
+    if (!window.supabase || !window.supabase_URL || !window.supabase_ANON_KEY) {
+      throw new Error("sbClient не настроен");
     }
-    supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    sbClient = window.supabase.createClient(window.supabase_URL, window.supabase_ANON_KEY);
   }
-  return supabase;
+  return sbClient;
 }
 
 async function upsertRoomState(roomId, nextState) {
-  await ensureSupabaseReady();
+  await ensuresbClientReady();
   const payload = {
     room_id: roomId,
     phase: String(nextState?.phase || "lobby"),
@@ -1374,17 +1374,17 @@ async function upsertRoomState(roomId, nextState) {
     state: nextState,
     updated_at: new Date().toISOString()
   };
-  const { error } = await supabase.from("room_state").upsert(payload);
+  const { error } = await sbClient.from("room_state").upsert(payload);
   if (error) throw error;
 }
 
 async function subscribeRoomDb(roomId) {
-  await ensureSupabaseReady();
+  await ensuresbClientReady();
   if (roomDbChannel) {
     try { await roomDbChannel.unsubscribe(); } catch {}
     roomDbChannel = null;
   }
-  roomDbChannel = supabase
+  roomDbChannel = sbClient
     .channel(`db-room_state-${roomId}`)
     .on(
       "postgres_changes",
@@ -1403,7 +1403,7 @@ async function subscribeRoomDb(roomId) {
     try { await roomChannel.unsubscribe(); } catch {}
     roomChannel = null;
   }
-  roomChannel = supabase
+  roomChannel = sbClient
     .channel(`room:${roomId}`)
     .on("broadcast", { event: "diceEvent" }, ({ payload }) => {
       if (payload && payload.event) handleMessage({ type: "diceEvent", event: payload.event });
@@ -1413,13 +1413,13 @@ async function subscribeRoomDb(roomId) {
 
 async function sendMessage(msg) {
   try {
-    await ensureSupabaseReady();
+    await ensuresbClientReady();
     if (!msg || typeof msg !== "object") return;
 
     switch (msg.type) {
       // ===== Rooms =====
       case "listRooms": {
-        const { data, error } = await supabase
+        const { data, error } = await sbClient
           .from("rooms")
           .select("id,name,scenario,created_at")
           .order("created_at", { ascending: false });
@@ -1432,11 +1432,11 @@ async function sendMessage(msg) {
         const roomId = (crypto?.randomUUID ? crypto.randomUUID() : ("r-" + Math.random().toString(16).slice(2)));
         const name = String(msg.name || "Комната").trim() || "Комната";
         const scenario = String(msg.scenario || "");
-        const { error: e1 } = await supabase.from("rooms").insert({ id: roomId, name, scenario });
+        const { error: e1 } = await sbClient.from("rooms").insert({ id: roomId, name, scenario });
         if (e1) throw e1;
 
         const initState = createInitialGameState();
-        const { error: e2 } = await supabase.from("room_state").insert({
+        const { error: e2 } = await sbClient.from("room_state").insert({
           room_id: roomId,
           phase: initState.phase,
           current_actor_id: null,
@@ -1453,18 +1453,18 @@ async function sendMessage(msg) {
         const roomId = String(msg.roomId || "");
         if (!roomId) return;
 
-        const { data: room, error: er } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+        const { data: room, error: er } = await sbClient.from("rooms").select("*").eq("id", roomId).single();
         if (er) throw er;
 
         currentRoomId = roomId;
         handleMessage({ type: "joinedRoom", room });
 
         // ensure room_state exists
-        let { data: rs, error: ers } = await supabase.from("room_state").select("*").eq("room_id", roomId).maybeSingle();
+        let { data: rs, error: ers } = await sbClient.from("room_state").select("*").eq("room_id", roomId).maybeSingle();
         if (ers) throw ers;
         if (!rs) {
           const initState = createInitialGameState();
-          await supabase.from("room_state").insert({ room_id: roomId, phase: initState.phase, current_actor_id: null, state: initState });
+          await sbClient.from("room_state").insert({ room_id: roomId, phase: initState.phase, current_actor_id: null, state: initState });
           rs = { state: initState };
         }
 
@@ -1489,7 +1489,7 @@ async function sendMessage(msg) {
       // ===== Saved bases (characters) =====
       case "listSavedBases": {
         const userId = String(localStorage.getItem("dnd_user_id") || "");
-        const { data, error } = await supabase
+        const { data, error } = await sbClient
           .from("characters")
           .select("id,name,updated_at")
           .eq("user_id", userId)
@@ -1503,7 +1503,7 @@ async function sendMessage(msg) {
         const userId = String(localStorage.getItem("dnd_user_id") || "");
         const sheet = msg.sheet;
         const name = String(sheet?.parsed?.name?.value ?? sheet?.parsed?.name ?? sheet?.parsed?.profile?.name ?? "Персонаж").trim() || "Персонаж";
-        const { data, error } = await supabase
+        const { data, error } = await sbClient
           .from("characters")
           .insert({
             user_id: userId,
@@ -1521,7 +1521,7 @@ async function sendMessage(msg) {
         const userId = String(localStorage.getItem("dnd_user_id") || "");
         const savedId = String(msg.savedId || "");
         if (!savedId) return;
-        const { error } = await supabase.from("characters").delete().eq("id", savedId).eq("user_id", userId);
+        const { error } = await sbClient.from("characters").delete().eq("id", savedId).eq("user_id", userId);
         if (error) throw error;
         handleMessage({ type: "savedBaseDeleted", savedId });
         break;
@@ -1531,7 +1531,7 @@ async function sendMessage(msg) {
         const userId = String(localStorage.getItem("dnd_user_id") || "");
         const savedId = String(msg.savedId || "");
         if (!currentRoomId || !lastState) return;
-        const { data, error } = await supabase.from("characters").select("state").eq("id", savedId).eq("user_id", userId).single();
+        const { data, error } = await sbClient.from("characters").select("state").eq("id", savedId).eq("user_id", userId).single();
         if (error) throw error;
         const savedSheet = data?.state?.data;
         if (!savedSheet) throw new Error("Пустой файл персонажа");
