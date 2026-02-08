@@ -2768,7 +2768,22 @@ function normalizeDndSuUrl(url) {
 }
 
 async function fetchSpellHtml(url) {
-  // IMPORTANT: через наш сервер, чтобы избежать CORS
+  // IMPORTANT: нужен прокси, чтобы избежать CORS (GitHub Pages = статик)
+  // Если задана window.SUPABASE_FETCH_FN (Supabase Edge Function), используем её.
+  // Иначе падаем обратно на старый /api/fetch (для локального запуска).
+  if (typeof window !== 'undefined' && window.SUPABASE_FETCH_FN) {
+    const r = await fetch(String(window.SUPABASE_FETCH_FN), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data || !data.ok) {
+      throw new Error(data?.error || `HTTP ${r.status}`);
+    }
+    return String(data.text || '');
+  }
+
   const r = await fetch(`/api/fetch?url=${encodeURIComponent(url)}`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return await r.text();

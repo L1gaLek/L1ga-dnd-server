@@ -67,7 +67,11 @@ const worldPhasesBox = document.getElementById('world-phases');
 const envEditorBox = document.getElementById('env-editor');
 
 // ================== VARIABLES ==================
-let ws;
+// Supabase replaces our old Node/WebSocket server.
+// GitHub Pages hosts only static files; realtime + DB are handled by Supabase.
+let supabase;
+let roomChannel;    // broadcast/presence channel (optional)
+let roomDbChannel;  // postgres_changes channel
 let myId;
 let myRole;
 let currentRoomId = null;
@@ -100,18 +104,34 @@ joinBtn.addEventListener('click', () => {
     return;
   }
 
-  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host);
+  // ===== Supabase init (GitHub Pages) =====
+  if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+    loginError.textContent = "Supabase не настроен. Проверьте SUPABASE_URL и SUPABASE_ANON_KEY в index.html";
+    return;
+  }
 
-    const savedUserId = localStorage.getItem("dnd_user_id") || "";
-  const savedUserRole = localStorage.getItem("dnd_user_role") || "";
-  const userIdToSend = (savedUserId && savedUserRole === role) ? savedUserId : "";
+  supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
-  ws.onopen = () => ws.send(JSON.stringify({ type: "register", userId: userIdToSend, name, role }));
+  // stable identity (doesn't depend on nickname)
+  const savedUserId = localStorage.getItem("dnd_user_id") || "";
+  const userId = savedUserId || ("xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  }));
 
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
+  localStorage.setItem("dnd_user_id", String(userId));
+  localStorage.setItem("dnd_user_role", String(role || ""));
 
-    
+  // In Supabase-MVP our "myId" is stable localStorage userId
+  handleMessage({ type: "registered", id: userId, name, role });
+
+  // list rooms from DB
+  sendMessage({ type: 'listRooms' });
+});
+
+// ================== MESSAGE HANDLER (used by Supabase subscriptions) ==================
+function handleMessage(msg) {
 
 // ===== Rooms lobby messages =====
 if (msg.type === 'rooms' && Array.isArray(msg.rooms)) {
@@ -239,13 +259,7 @@ loginDiv.style.display = 'none';
       // если "Инфа" открыта — обновляем ее по свежему state
       window.InfoModal?.refresh?.(players);
     }
-  };
-
-  ws.onerror = (e) => {
-    loginError.textContent = "Ошибка соединения с сервером";
-    console.error(e);
-  };
-});
+}
 
 startInitiativeBtn?.addEventListener("click", () => {
   sendMessage({ type: "startInitiative" });
@@ -1259,8 +1273,548 @@ clearBoardBtn.addEventListener('click', () => {
 });
 
 // ================== HELPER ==================
-function sendMessage(msg) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+function deepClone(obj) {
+  try { return structuredClone(obj); } catch {}
+  return JSON.parse(JSON.stringify(obj || null));
+}
+
+function createInitialGameState() {
+  return {
+    boardWidth: 10,
+    boardHeight: 10,
+    phase: "lobby",
+    players: [],
+    walls: [],
+    turnOrder: [],
+    currentTurnIndex: 0,
+    log: []
+  };
+}
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function isAreaFree(state, ignorePlayerId, x, y, size) {
+  const walls = Array.isArray(state.walls) ? state.walls : [];
+  // walls block only the top-left cell of a token (as in server)
+  if (walls.some(w => w && w.x === x && w.y === y)) return false;
+
+  const players = Array.isArray(state.players) ? state.players : [];
+  for (const p of players) {
+    if (!p || p.id === ignorePlayerId) continue;
+    if (p.x === null || p.y === null) continue;
+    const ps = Number(p.size) || 1;
+
+    // AABB intersect
+    const inter = !(x + size <= p.x || p.x + ps <= x || y + size <= p.y || p.y + ps <= y);
+    if (inter) return false;
+  }
+  return true;
+}
+
+function autoPlacePlayers(state) {
+  const players = Array.isArray(state.players) ? state.players : [];
+  for (const p of players) {
+    if (!p) continue;
+    if (p.x !== null && p.y !== null) continue;
+    const size = Number(p.size) || 1;
+    let placed = false;
+    for (let y = 0; y <= state.boardHeight - size && !placed; y++) {
+      for (let x = 0; x <= state.boardWidth - size && !placed; x++) {
+        if (isAreaFree(state, p.id, x, y, size)) {
+          p.x = x;
+          p.y = y;
+          placed = true;
+        }
+      }
+    }
+    if (!placed) {
+      // fallback
+      p.x = 0;
+      p.y = 0;
+    }
+  }
+}
+
+function getDexMod(player) {
+  try {
+    const dex = player?.sheet?.parsed?.stats?.dex?.value;
+    const n = Number(dex);
+    if (!Number.isFinite(n)) return 0;
+    return Math.floor((n - 10) / 2);
+  } catch {
+    return 0;
+  }
+}
+
+function logEventToState(state, text) {
+  if (!text) return;
+  if (!Array.isArray(state.log)) state.log = [];
+  state.log.push(String(text));
+  if (state.log.length > 200) state.log.splice(0, state.log.length - 200);
+}
+
+async function ensureSupabaseReady() {
+  if (!supabase) {
+    if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+      throw new Error("Supabase не настроен");
+    }
+    supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  }
+  return supabase;
+}
+
+async function upsertRoomState(roomId, nextState) {
+  await ensureSupabaseReady();
+  const payload = {
+    room_id: roomId,
+    phase: String(nextState?.phase || "lobby"),
+    current_actor_id: nextState?.turnOrder?.[nextState?.currentTurnIndex] ?? null,
+    state: nextState,
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await supabase.from("room_state").upsert(payload);
+  if (error) throw error;
+}
+
+async function subscribeRoomDb(roomId) {
+  await ensureSupabaseReady();
+  if (roomDbChannel) {
+    try { await roomDbChannel.unsubscribe(); } catch {}
+    roomDbChannel = null;
+  }
+  roomDbChannel = supabase
+    .channel(`db-room_state-${roomId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "room_state", filter: `room_id=eq.${roomId}` },
+      (payload) => {
+        const row = payload.new;
+        if (row && row.state) {
+          handleMessage({ type: "state", state: row.state });
+        }
+      }
+    );
+  await roomDbChannel.subscribe();
+
+  // Optional: broadcast channel (dice events)
+  if (roomChannel) {
+    try { await roomChannel.unsubscribe(); } catch {}
+    roomChannel = null;
+  }
+  roomChannel = supabase
+    .channel(`room:${roomId}`)
+    .on("broadcast", { event: "diceEvent" }, ({ payload }) => {
+      if (payload && payload.event) handleMessage({ type: "diceEvent", event: payload.event });
+    });
+  await roomChannel.subscribe();
+}
+
+async function sendMessage(msg) {
+  try {
+    await ensureSupabaseReady();
+    if (!msg || typeof msg !== "object") return;
+
+    switch (msg.type) {
+      // ===== Rooms =====
+      case "listRooms": {
+        const { data, error } = await supabase
+          .from("rooms")
+          .select("id,name,scenario,created_at")
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        handleMessage({ type: "rooms", rooms: data || [] });
+        break;
+      }
+
+      case "createRoom": {
+        const roomId = (crypto?.randomUUID ? crypto.randomUUID() : ("r-" + Math.random().toString(16).slice(2)));
+        const name = String(msg.name || "Комната").trim() || "Комната";
+        const scenario = String(msg.scenario || "");
+        const { error: e1 } = await supabase.from("rooms").insert({ id: roomId, name, scenario });
+        if (e1) throw e1;
+
+        const initState = createInitialGameState();
+        const { error: e2 } = await supabase.from("room_state").insert({
+          room_id: roomId,
+          phase: initState.phase,
+          current_actor_id: null,
+          state: initState
+        });
+        if (e2) throw e2;
+
+        // refresh list
+        await sendMessage({ type: "listRooms" });
+        break;
+      }
+
+      case "joinRoom": {
+        const roomId = String(msg.roomId || "");
+        if (!roomId) return;
+
+        const { data: room, error: er } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+        if (er) throw er;
+
+        currentRoomId = roomId;
+        handleMessage({ type: "joinedRoom", room });
+
+        // ensure room_state exists
+        let { data: rs, error: ers } = await supabase.from("room_state").select("*").eq("room_id", roomId).maybeSingle();
+        if (ers) throw ers;
+        if (!rs) {
+          const initState = createInitialGameState();
+          await supabase.from("room_state").insert({ room_id: roomId, phase: initState.phase, current_actor_id: null, state: initState });
+          rs = { state: initState };
+        }
+
+        await subscribeRoomDb(roomId);
+        handleMessage({ type: "state", state: rs.state });
+        break;
+      }
+
+      // ===== Dice live events =====
+      case "diceEvent": {
+        if (!currentRoomId || !roomChannel) return;
+        await roomChannel.send({
+          type: "broadcast",
+          event: "diceEvent",
+          payload: { event: msg.event }
+        });
+        // also apply to self instantly
+        if (msg.event) handleMessage({ type: "diceEvent", event: msg.event });
+        break;
+      }
+
+      // ===== Saved bases (characters) =====
+      case "listSavedBases": {
+        const userId = String(localStorage.getItem("dnd_user_id") || "");
+        const { data, error } = await supabase
+          .from("characters")
+          .select("id,name,updated_at")
+          .eq("user_id", userId)
+          .order("updated_at", { ascending: false });
+        if (error) throw error;
+        handleMessage({ type: "savedBasesList", list: (data || []).map(x => ({ id: x.id, name: x.name, updatedAt: x.updated_at })) });
+        break;
+      }
+
+      case "saveSavedBase": {
+        const userId = String(localStorage.getItem("dnd_user_id") || "");
+        const sheet = msg.sheet;
+        const name = String(sheet?.parsed?.name?.value ?? sheet?.parsed?.name ?? sheet?.parsed?.profile?.name ?? "Персонаж").trim() || "Персонаж";
+        const { data, error } = await supabase
+          .from("characters")
+          .insert({
+            user_id: userId,
+            name,
+            state: { schemaVersion: 1, savedAt: new Date().toISOString(), data: sheet },
+            updated_at: new Date().toISOString()
+          })
+          .select("id");
+        if (error) throw error;
+        handleMessage({ type: "savedBaseSaved", id: data?.[0]?.id, name });
+        break;
+      }
+
+      case "deleteSavedBase": {
+        const userId = String(localStorage.getItem("dnd_user_id") || "");
+        const savedId = String(msg.savedId || "");
+        if (!savedId) return;
+        const { error } = await supabase.from("characters").delete().eq("id", savedId).eq("user_id", userId);
+        if (error) throw error;
+        handleMessage({ type: "savedBaseDeleted", savedId });
+        break;
+      }
+
+      case "applySavedBase": {
+        const userId = String(localStorage.getItem("dnd_user_id") || "");
+        const savedId = String(msg.savedId || "");
+        if (!currentRoomId || !lastState) return;
+        const { data, error } = await supabase.from("characters").select("state").eq("id", savedId).eq("user_id", userId).single();
+        if (error) throw error;
+        const savedSheet = data?.state?.data;
+        if (!savedSheet) throw new Error("Пустой файл персонажа");
+
+        const next = deepClone(lastState);
+        const p = (next.players || []).find(pl => pl.id === msg.playerId);
+        if (!p || !p.isBase) {
+          handleMessage({ type: "error", message: "Загружать можно только в персонажа 'Основа'." });
+          return;
+        }
+        p.sheet = deepClone(savedSheet);
+        try {
+          const parsed = p.sheet?.parsed;
+          const nextName = parsed?.name?.value ?? parsed?.name;
+          if (typeof nextName === "string" && nextName.trim()) p.name = nextName.trim();
+        } catch {}
+
+        await upsertRoomState(currentRoomId, next);
+        handleMessage({ type: "savedBaseApplied", playerId: p.id, savedId });
+        break;
+      }
+
+      // ===== Game logic (DB truth via room_state.state) =====
+      default: {
+        if (!currentRoomId) return;
+        if (!lastState) return;
+
+        const next = deepClone(lastState);
+        const isGM = (String(myRole || "") === "GM");
+        const myUserId = String(localStorage.getItem("dnd_user_id") || "");
+
+        const ownsPlayer = (pl) => pl && String(pl.ownerId) === myUserId;
+
+        const type = msg.type;
+
+        if (type === "resizeBoard") {
+          if (!isGM) return;
+          next.boardWidth = msg.width;
+          next.boardHeight = msg.height;
+          logEventToState(next, "Поле изменено");
+        }
+
+        else if (type === "startInitiative") {
+          if (!isGM) return;
+          next.phase = "initiative";
+          (next.players || []).forEach(p => {
+            p.initiative = null;
+            p.hasRolledInitiative = false;
+          });
+          logEventToState(next, "GM начал фазу инициативы");
+        }
+
+        else if (type === "startExploration") {
+          if (!isGM) return;
+          next.phase = "exploration";
+          logEventToState(next, "GM начал фазу исследования");
+        }
+
+        else if (type === "addPlayer") {
+          const player = msg.player || {};
+          const isBase = !!player.isBase;
+          if (isBase) {
+            const exists = (next.players || []).some(p => p.isBase && p.ownerId === myUserId);
+            if (exists) {
+              handleMessage({ type: "error", message: "У вас уже есть Основа. Можно иметь только одну основу на пользователя." });
+              return;
+            }
+          }
+          const id = player.id || (crypto?.randomUUID ? crypto.randomUUID() : ("p-" + Math.random().toString(16).slice(2)));
+          next.players.push({
+            id,
+            name: player.name,
+            color: player.color,
+            size: player.size,
+            x: null,
+            y: null,
+            initiative: 0,
+            hasRolledInitiative: false,
+            pendingInitiativeChoice: (next.phase === "combat"),
+            willJoinNextRound: false,
+            isBase,
+            ownerId: myUserId,
+            ownerName: myNameSpan?.textContent || "",
+            sheet: player.sheet || { parsed: { name: { value: player.name } } }
+          });
+          logEventToState(next, `Добавлен игрок ${player.name}`);
+        }
+
+        else if (type === "movePlayer") {
+          const p = (next.players || []).find(pp => pp.id === msg.id);
+          if (!p) return;
+          if (!isGM && !ownsPlayer(p)) return;
+
+          if (next.phase === "combat" && !isGM) {
+            const currentId = next.turnOrder?.[next.currentTurnIndex];
+            const notPlacedYet = (p.x === null || p.y === null);
+            if (p.id !== currentId && !notPlacedYet) return;
+          }
+
+          const size = Number(p.size) || 1;
+          const maxX = next.boardWidth - size;
+          const maxY = next.boardHeight - size;
+          const nx = clamp(Number(msg.x) || 0, 0, maxX);
+          const ny = clamp(Number(msg.y) || 0, 0, maxY);
+
+          if (!isAreaFree(next, p.id, nx, ny, size)) {
+            handleMessage({ type: "error", message: "Эта клетка занята другим персонажем" });
+            return;
+          }
+
+          p.x = nx;
+          p.y = ny;
+          logEventToState(next, `${p.name} перемещен в (${p.x},${p.y})`);
+        }
+
+        else if (type === "updatePlayerSize") {
+          const p = (next.players || []).find(pp => pp.id === msg.id);
+          if (!p) return;
+          if (!isGM && !ownsPlayer(p)) return;
+          const newSize = parseInt(msg.size, 10);
+          if (!Number.isFinite(newSize) || newSize < 1 || newSize > 5) return;
+
+          if (p.x !== null && p.y !== null) {
+            const maxX = next.boardWidth - newSize;
+            const maxY = next.boardHeight - newSize;
+            const nx = clamp(p.x, 0, maxX);
+            const ny = clamp(p.y, 0, maxY);
+            if (!isAreaFree(next, p.id, nx, ny, newSize)) {
+              handleMessage({ type: "error", message: "Нельзя увеличить размер: место занято" });
+              return;
+            }
+            p.x = nx;
+            p.y = ny;
+          }
+          p.size = newSize;
+          logEventToState(next, `${p.name} изменил размер на ${p.size}x${p.size}`);
+        }
+
+        else if (type === "removePlayerFromBoard") {
+          const p = (next.players || []).find(pp => pp.id === msg.id);
+          if (!p) return;
+          if (!isGM && !ownsPlayer(p)) return;
+          p.x = null;
+          p.y = null;
+          logEventToState(next, `${p.name} удален с поля`);
+        }
+
+        else if (type === "removePlayerCompletely") {
+          const p = (next.players || []).find(pp => pp.id === msg.id);
+          if (!p) return;
+          if (!isGM && !ownsPlayer(p)) return;
+          next.players = (next.players || []).filter(pl => pl.id !== msg.id);
+          next.turnOrder = (next.turnOrder || []).filter(id => id !== msg.id);
+          logEventToState(next, `Игрок ${p.name} полностью удален`);
+        }
+
+        else if (type === "addWall") {
+          if (!isGM) return;
+          const w = msg.wall;
+          if (!w) return;
+          if (!(next.walls || []).find(x => x.x === w.x && x.y === w.y)) {
+            next.walls.push({ x: w.x, y: w.y });
+            logEventToState(next, `Стена добавлена (${w.x},${w.y})`);
+          }
+        }
+
+        else if (type === "removeWall") {
+          if (!isGM) return;
+          const w = msg.wall;
+          if (!w) return;
+          next.walls = (next.walls || []).filter(x => !(x.x === w.x && x.y === w.y));
+          logEventToState(next, `Стена удалена (${w.x},${w.y})`);
+        }
+
+        else if (type === "rollInitiative") {
+          if (next.phase !== "initiative") return;
+          (next.players || [])
+            .filter(p => p.ownerId === myUserId && !p.hasRolledInitiative)
+            .forEach(p => {
+              const roll = Math.floor(Math.random() * 20) + 1;
+              const dexMod = getDexMod(p);
+              const total = roll + dexMod;
+              p.initiative = total;
+              p.hasRolledInitiative = true;
+
+              // live dice event
+              sendMessage({
+                type: "diceEvent",
+                event: {
+                  fromId: myUserId,
+                  fromName: p.name,
+                  kindText: `Инициатива: d20${dexMod >= 0 ? "+" : ""}${dexMod}`,
+                  sides: 20,
+                  count: 1,
+                  bonus: dexMod,
+                  rolls: [roll],
+                  total,
+                  crit: ""
+                }
+              });
+              const sign = dexMod >= 0 ? "+" : "";
+              logEventToState(next, `${p.name} бросил инициативу: ${roll}${sign}${dexMod} = ${total}`);
+            });
+        }
+
+        else if (type === "startCombat") {
+          if (!isGM) return;
+          if (next.phase !== "initiative" && next.phase !== "placement" && next.phase !== "exploration") return;
+          const allRolled = (next.players || []).length ? next.players.every(p => p.hasRolledInitiative) : false;
+          if (!allRolled) {
+            handleMessage({ type: "error", message: "Сначала бросьте инициативу за всех персонажей" });
+            return;
+          }
+          next.turnOrder = [...(next.players || [])]
+            .sort((a, b) => (Number(b.initiative) || 0) - (Number(a.initiative) || 0))
+            .map(p => p.id);
+          autoPlacePlayers(next);
+          next.phase = "combat";
+          next.currentTurnIndex = 0;
+          const firstId = next.turnOrder[0];
+          const first = (next.players || []).find(p => p.id === firstId);
+          logEventToState(next, `Бой начался. Первый ход: ${first?.name || '-'}`);
+        }
+
+        else if (type === "endTurn") {
+          if (next.phase !== "combat") return;
+          if (!Array.isArray(next.turnOrder) || next.turnOrder.length === 0) return;
+          const currentId = next.turnOrder[next.currentTurnIndex];
+          const current = (next.players || []).find(p => p.id === currentId);
+          const canEnd = isGM || (current && ownsPlayer(current));
+          if (!canEnd) return;
+
+          const prevIndex = next.currentTurnIndex;
+          const nextIndex = (next.currentTurnIndex + 1) % next.turnOrder.length;
+          const wrapped = (prevIndex === next.turnOrder.length - 1 && nextIndex === 0);
+          if (wrapped) {
+            const toJoin = (next.players || []).filter(p => p && p.willJoinNextRound);
+            if (toJoin.length) {
+              toJoin.forEach(p => { p.willJoinNextRound = false; });
+              next.turnOrder = [...new Set(
+                [...next.players]
+                  .filter(p => p && (p.initiative !== null && p.initiative !== undefined))
+                  .sort((a, b) => (Number(b.initiative) || 0) - (Number(a.initiative) || 0))
+                  .map(p => p.id)
+              )];
+            }
+          }
+          next.currentTurnIndex = wrapped ? 0 : nextIndex;
+          const nid = next.turnOrder[next.currentTurnIndex];
+          const np = (next.players || []).find(p => p.id === nid);
+          logEventToState(next, `Ход игрока ${np?.name || '-'}`);
+        }
+
+        else if (type === "resetGame") {
+          if (!isGM) return;
+          next.players = [];
+          next.walls = [];
+          next.turnOrder = [];
+          next.currentTurnIndex = 0;
+          next.log = ["Игра полностью сброшена"];
+        }
+
+        else if (type === "clearBoard") {
+          if (!isGM) return;
+          (next.players || []).forEach(p => { p.x = null; p.y = null; });
+          next.walls = [];
+          logEventToState(next, "Поле очищено");
+        }
+
+        else {
+          // unknown message type (ignored)
+          return;
+        }
+
+        await upsertRoomState(currentRoomId, next);
+        break;
+      }
+    }
+  } catch (e) {
+    console.error(e);
+    const text = String(e?.message || e || "Ошибка");
+    handleMessage({ type: "error", message: text });
+  }
 }
 
 function updatePhaseUI(state) {

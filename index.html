@@ -244,6 +244,19 @@
   </div>
 </div>
 
+<!-- Supabase (realtime + DB). Configure in the block below. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // === SUPABASE CONFIG (fill these) ===
+  // Project URL: Supabase Dashboard -> Project Settings -> API -> Project URL
+  window.SUPABASE_URL = "PASTE_SUPABASE_URL_HERE";
+  // anon public key: Supabase Dashboard -> Project Settings -> API -> anon public
+  window.SUPABASE_ANON_KEY = "PASTE_SUPABASE_ANON_KEY_HERE";
+  // Optional: Edge Function URL for CORS proxy (dnd.su spell pages)
+  // Example: https://<project-ref>.functions.supabase.co/fetch
+  window.SUPABASE_FETCH_FN = "PASTE_SUPABASE_FETCH_FN_URL_HERE";
+</script>
+
 <script src="info-dnd-player.js" defer></script>
 <script src="client.js" defer></script>
 
