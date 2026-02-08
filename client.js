@@ -110,7 +110,7 @@ joinBtn.addEventListener('click', () => {
     return;
   }
 
-  supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  // supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
   // stable identity (doesn't depend on nickname)
   const savedUserId = localStorage.getItem("dnd_user_id") || "";
