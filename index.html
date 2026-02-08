@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Мини D&D</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================== LOGIN ================== -->
+<div id="login-container">
+  <h2>Вход в игру</h2>
+  <input type="text" id="username" placeholder="Введите имя">
+  <select id="role">
+    <option value="GM">GM</option>
+    <option value="DnD-Player">Игрок</option>
+    <option value="Spectator">Наблюдатель</option>
+  </select>
+  <button id="joinBtn">Войти</button>
+  <p id="loginError" style="color:red;"></p>
+</div>
+
+
+<!-- ================== ROOMS LOBBY ================== -->
+<div id="rooms-container" style="display:none;">
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+    <h2 style="margin:0;">Комнаты</h2>
+    <button id="createRoomBtn">Создать комнату</button>
+  </div>
+
+  <div id="rooms-list" style="margin-top:12px;"></div>
+  <p id="roomsError" style="color:#ff6b6b; margin-top:10px;"></p>
+</div>
+
+<!-- ===== Create room modal ===== -->
+<div id="createRoomModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Создать комнату</div>
+        <div class="modal-subtitle">Пароль необязателен</div>
+      </div>
+      <button id="createRoomClose" class="modal-close">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="sheet-card" style="display:flex; flex-direction:column; gap:10px;">
+        <input id="roomNameInput" type="text" placeholder="Название комнаты">
+        <input id="roomPasswordInput" type="text" placeholder="Пароль (необязательно)">
+        <input id="roomScenarioInput" type="text" placeholder="Название сценария D&D (необязательно)">
+
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:6px;">
+          <button id="createRoomCancel">Отмена</button>
+          <button id="createRoomSubmit">Создать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================== MAIN GAME ================== -->
+<div id="main-container" style="display:none;">
+
+  <!-- Верхняя строка -->
+  <div id="status-bar">
+    <span>Вы: <strong id="myName">-</strong></span> |
+    <span>Роль: <strong id="myRole">-</strong></span> |
+    <span>Комната: <strong id="myRoom">-</strong></span> |
+    <span>Сценарий: <strong id="myScenario">-</strong></span>
+  </div>
+
+  <!-- Контент: 2 колонки -->
+  <div id="content-row">
+
+<!-- Левая панель -->
+<div id="action-log-container">
+
+  <!-- ЖУРНАЛ -->
+  <div id="action-log">
+    <h3>Журнал действий:</h3>
+    <ul id="log-list"></ul>
+  </div>
+
+  <!-- СТРОКА ПОД ЖУРНАЛОМ -->
+  <div id="action-bottom-row">
+
+    <!-- УПРАВЛЕНИЕ ИГРОКАМИ -->
+    <div id="player-management">
+      <h3>Управление игроками:</h3>
+
+      <div id="player-controls">
+        <input type="text" id="player-name" placeholder="Имя игрока">
+        <input type="color" id="player-color" value="#ff0000">
+
+<label>Размер:
+  <select id="player-size">
+    <option value="1">1x1</option>
+    <option value="2">2x2</option>
+    <option value="3">3x3</option>
+    <option value="4">4x4</option>
+    <option value="5">5x5</option>
+  </select>
+</label>
+
+        <div class="player-type">
+          <label class="type-item">
+            <input type="checkbox" id="is-base">
+            Основа
+          </label>
+        </div>
+
+        <button id="add-player">Добавить игрока</button>
+      </div>
+    </div>
+
+    <!-- ПОЛЬЗОВАТЕЛИ И ПЕРСОНАЖИ -->
+    <div id="player-list-container">
+      <h3>Пользователи и персонажи:</h3>
+      <ul id="player-list"></ul>
+    </div>
+
+  </div>
+</div>
+
+    <!-- Игровая колонка -->
+    <div id="game-container">
+
+      <div id="board-row">
+
+        <!-- Левая часть (ширина = ширина поля). Всё, что "над полем", центрируется относительно поля -->
+        <div id="board-col">
+
+          <div id="current-turn">
+            Текущий игрок: <span id="current-player">-</span>
+            <button id="next-turn" class="next-turn-btn" type="button" title="Конец хода (по инициативе)">
+              Конец хода
+            </button>
+          </div>
+
+          <div id="board-settings">
+            <label>Ширина поля:
+              <input type="number" id="board-width" value="10" min="1" max="20">
+            </label>
+            <label>Высота поля:
+              <input type="number" id="board-height" value="10" min="1" max="20">
+            </label>
+            <button id="create-board">Создать поле</button>
+          </div>
+
+          <div id="board-wrapper">
+            <div id="game-board"></div>
+          </div>
+
+          <div id="initiative-warning" style="display:none; color: orange; font-weight: bold;">
+            Бросьте инициативу за своих персонажей!
+          </div>
+
+        </div>
+
+        <!-- Правая колонка (только для GM, управляется в client.js) -->
+        <div id="right-panel">
+
+          <div id="world-phases" class="side-box">
+            <h3>Фазы мира</h3>
+            <button id="start-exploration">Фаза исследования</button>
+            <button id="start-initiative">Фаза инициативы</button>
+            <button id="start-combat">Фаза бой</button>
+          </div>
+
+          <div id="env-editor" class="side-box">
+            <h3>Редактирования окружения</h3>
+            <button id="edit-environment">Редактирование окружения: ВЫКЛ</button>
+            <button id="add-wall" disabled>Добавить стену</button>
+            <button id="remove-wall" disabled>Удалить стену</button>
+            <button id="clear-board">Очистить поле</button>
+            <button id="reset-game">Сбросить игру полностью</button>
+          </div>
+
+        </div>
+    </div>
+  </div>
+</div>
+
+<!-- Dice Visualizer (bottom-left) -->
+<div id="dice-viz" class="dice-viz">
+  <div class="dice-viz-title">Бросок</div>
+
+  <!-- Инициатива: отдельная кнопка внутри панели, НЕ выпирает -->
+  <button id="roll-initiative" class="dice-viz-btn dice-viz-btn--initiative" type="button">
+    Инициатива
+  </button>
+
+  <!-- Строка броска: кубик + количество + Бросить -->
+  <div class="dice-viz-controls">
+    <select id="dice" class="dice-viz-select" title="Выбор кубика">
+      <option value="2">d2</option>
+      <option value="4">d4</option>
+      <option value="6">d6</option>
+      <option value="8">d8</option>
+      <option value="10">d10</option>
+      <option value="12">d12</option>
+      <option value="20" selected>d20</option>
+      <option value="100">d100</option>
+    </select>
+
+    <input id="dice-count"
+           class="dice-viz-count"
+           type="number"
+           min="1"
+           max="20"
+           value="1"
+           title="Количество кубиков">
+
+    <button id="roll" class="dice-viz-btn dice-viz-btn--roll" type="button">Бросить</button>
+  </div>
+
+  <canvas id="dice-canvas" width="220" height="140"></canvas>
+
+  <div id="dice-rolls" class="dice-viz-rolls" aria-label="Результаты броска"></div>
+
+  <div class="dice-viz-meta">
+    <span id="dice-viz-kind">d20 × 1</span>
+    <span id="dice-viz-value">—</span>
+  </div>
+</div>
+
+</div><!-- /#main-container -->
+
+<!-- ================== MODAL: SHEET INFO ================== -->
+<div id="sheet-modal" class="modal-overlay hidden" aria-hidden="true">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="sheet-title">Информация о персонаже</div>
+        <div class="modal-subtitle" id="sheet-subtitle"></div>
+      </div>
+      <button id="sheet-close" class="modal-close" title="Закрыть">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div id="sheet-actions" class="sheet-actions"></div>
+      <div id="sheet-content" class="sheet-content"></div>
+    </div>
+  </div>
+</div>
+
+<script src="info-dnd-player.js" defer></script>
+<script src="client.js" defer></script>
+
+</body>
+</html>
