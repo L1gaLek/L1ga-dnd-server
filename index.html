@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Мини D&D</title>
-<link rel="stylesheet" href="style_fixed.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -138,13 +138,30 @@
           </div>
 
           <div id="board-settings">
-            <label>Ширина поля:
-              <input type="number" id="board-width" value="10" min="1" max="20">
-            </label>
-            <label>Высота поля:
-              <input type="number" id="board-height" value="10" min="1" max="20">
-            </label>
-            <button id="create-board">Создать поле</button>
+            <div class="board-settings-row">
+              <label>Ширина поля:
+                <input type="number" id="board-width" value="20" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
+              </label>
+              <label>Высота поля:
+                <input type="number" id="board-height" value="20" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
+              </label>
+              <button id="create-board" type="button" title="Применить размер рамки (только для вас)">Применить вид</button>
+            </div>
+
+            <!-- Только для GM: реальный размер карты (количество клеток внутри поля) -->
+            <div id="board-settings-gm" class="board-settings-row" style="margin-top:8px;">
+              <label>Ширина поля (ГМ):
+                <input type="number" id="board-width-gm" value="20" min="20" max="150" title="Реальная ширина карты в клетках (20–150)">
+              </label>
+              <label>Высота поля (ГМ):
+                <input type="number" id="board-height-gm" value="20" min="20" max="150" title="Реальная высота карты в клетках (20–150)">
+              </label>
+              <button id="create-board-gm" type="button" title="Изменить реальный размер карты (видно всем)">Применить карту</button>
+            </div>
+
+            <div style="margin-top:6px; opacity:.75; font-size:12px;">
+              Подсказка: прокрутка — колёсиком мыши. Масштаб — <b>Ctrl + колёсико</b>.
+            </div>
           </div>
 
           <div id="board-wrapper">
@@ -157,7 +174,7 @@
 
         </div>
 
-        <!-- Правая колонка (только для GM, управляется в client_fixed.js) -->
+        <!-- Правая колонка (только для GM, управляется в client.js) -->
         <div id="right-panel">
 
           <div id="world-phases" class="side-box">
@@ -259,7 +276,7 @@
 
 <script src="info-dnd-player.js" defer></script>
 <script src="controlbox.js"></script>
-<script src="client_fixed.js"></script>
+<script src="client.js"></script>
 
 </body>
 </html>
