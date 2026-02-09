@@ -24,21 +24,6 @@ const roomScenarioInput = document.getElementById('roomScenarioInput');
 
 const gameUI = document.getElementById('main-container');
 const myNameSpan = document.getElementById('myName');
-
-function safeGetUserName() {
-  const raw = localStorage.getItem("dnd_user_name");
-  const fromLs = (typeof raw === "string") ? raw.trim() : "";
-  if (fromLs) return fromLs;
-
-  // на случай, если localStorage ещё не заполнен
-  const inp = document.getElementById("username");
-  const fromInput = (inp && typeof inp.value === "string") ? inp.value.trim() : "";
-  if (fromInput) return fromInput;
-
-  const fromSpan = String(myNameSpan?.textContent || "").replace(/^\s*Вы:\s*/i, "").trim();
-  return fromSpan || "Player";
-}
-
 const myRoleSpan = document.getElementById('myRole');
 const myRoomSpan = document.getElementById('myRoom');
 const myScenarioSpan = document.getElementById('myScenario');
@@ -101,6 +86,26 @@ function normalizeRoleForUi(role) {
   if (r === 'Player') return 'DnD-Player';
   return r;
 }
+
+function safeGetUserName() {
+  const raw = localStorage.getItem("dnd_user_name");
+  const fromLs = (typeof raw === "string") ? raw.trim() : "";
+  if (fromLs) return fromLs;
+
+  // fallback: input on login screen (например, в новой вкладке до полной инициализации)
+  const inp = document.getElementById("username");
+  const fromInput = (inp && typeof inp.value === "string") ? inp.value.trim() : "";
+  if (fromInput) return fromInput;
+
+  const fromSpan = String(myNameSpan?.textContent || "").replace(/^\s*Вы:\s*/i, "").trim();
+  return fromSpan || "Player";
+}
+
+function safeGetUserRoleDb() {
+  const raw = String(localStorage.getItem("dnd_user_role") || myRole || "");
+  return normalizeRoleForDb(raw);
+}
+
 function isGM() { return String(myRole || '') === 'GM'; }
 
 function applyRoleToUI() {
@@ -135,6 +140,62 @@ function applyRoleToUI() {
   });
 }
 let currentRoomId = null;
+
+let heartbeatTimer = null;
+
+function startHeartbeat() {
+  stopHeartbeat();
+  if (!sbClient || !currentRoomId || !myId) return;
+
+  updateLastSeen();
+  heartbeatTimer = setInterval(updateLastSeen, 60_000); // раз в минуту
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
+
+async function updateLastSeen() {
+  try {
+    await ensureSupabaseReady();
+    const ts = new Date().toISOString();
+
+    // Важно: не трогаем name/role на каждом тике — иначе 2 вкладки могут перезаписать имя.
+    const { data, error } = await sbClient
+      .from("room_members")
+      .update({ last_seen: ts })
+      .eq("room_id", currentRoomId)
+      .eq("user_id", myId)
+      .select("room_id");
+
+    if (error) throw error;
+
+    // Если записи нет (например, её подчистил cleanup) — восстановим.
+    if (!data || (Array.isArray(data) && data.length === 0)) {
+      const { error: upErr } = await sbClient
+        .from("room_members")
+        .upsert({
+          room_id: currentRoomId,
+          user_id: myId,
+          name: safeGetUserName(),
+          role: safeGetUserRoleDb(),
+          last_seen: ts
+        });
+      if (upErr) throw upErr;
+    }
+  } catch {
+    // не критично
+  }
+}
+
+// Останавливаем heartbeat при закрытии вкладки (но это не "выход из комнаты" — просто прекращаем пинг)
+window.addEventListener("beforeunload", () => {
+  stopHeartbeat();
+});
+
 let players = [];
 let lastState = null;
 let boardWidth = parseInt(boardWidthInput.value, 10) || 10;
@@ -214,6 +275,7 @@ if (msg.type === "registered") {
       myId = msg.id;
       localStorage.setItem("dnd_user_id", String(msg.id));
       localStorage.setItem("dnd_user_role", String(msg.role || ""));
+      localStorage.setItem(\"dnd_user_name\", String(msg.name || \"\"));
 myRole = msg.role;
       myNameSpan.textContent = msg.name;
       myRoleSpan.textContent = msg.role;
@@ -1587,10 +1649,10 @@ async function sendMessage(msg) {
           const { error: mErr } = await sbClient.from("room_members").upsert({
             room_id: roomId,
             user_id: userId,
-            name: safeGetUserName(),
+            name: safeGetUserName(), "") || "Player",
             role: normalizeRoleForDb(role),
             last_seen: new Date().toISOString()
-                    });
+          });
           if (mErr) {
             // Unique violation (second GM) => Postgres code 23505
             if (role === "GM" && (mErr.code === "23505" || String(mErr.message || "").includes("uq_one_gm_per_room"))) {
@@ -1604,6 +1666,8 @@ async function sendMessage(msg) {
         currentRoomId = roomId;
         handleMessage({ type: "joinedRoom", room });
 
+
+        startHeartbeat();
         // ensure room_state exists
         let { data: rs, error: ers } = await sbClient.from("room_state").select("*").eq("room_id", roomId).maybeSingle();
         if (ers) throw ers;
