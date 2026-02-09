@@ -1489,13 +1489,14 @@ async function sendMessage(msg) {
         // ===== Enforce roles: register membership + prevent multiple GMs =====
         const userId = String(localStorage.getItem("dnd_user_id") || myId || "");
         const role = String(localStorage.getItem("dnd_user_role") || myRole || "");
+        const roleForDb = (role === "DnD-Player") ? "Player" : role;
         const uname = String(localStorage.getItem("dnd_user_name") || "");
         if (userId && role) {
           const { error: mErr } = await sbClient.from("room_members").upsert({
             room_id: roomId,
             user_id: userId,
             name: uname || String(myNameSpan?.textContent || "").replace(/^\s*Вы:\s*/i, "") || "Player",
-            role: role
+            role: roleForDb
           });
           if (mErr) {
             // Unique violation (second GM) => Postgres code 23505
