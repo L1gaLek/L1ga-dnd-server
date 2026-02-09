@@ -91,11 +91,11 @@ function isGM() { return String(myRole || '') === 'GM'; }
 function applyRoleToUI() {
   const gm = isGM();
 
-  // ÐÐ-Ð¿Ð°Ð½ÐµÐ»Ñ ÑÐ¿ÑÐ°Ð²Ð° (Ð¤Ð°Ð·Ñ Ð¼Ð¸ÑÐ° + Ð ÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ Ð¾ÐºÑÑÐ¶ÐµÐ½Ð¸Ñ)
+  // ГМ-панель справа (Фазы мира + Редактирование окружения)
   const rightPanel = document.getElementById('right-panel');
   if (rightPanel) rightPanel.style.display = gm ? '' : 'none';
 
-  // ÐÐ»Ð¾Ðº "ÐÐ¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ Ð¸Ð³ÑÐ¾ÐºÐ°" ÑÐ»ÐµÐ²Ð° (ÑÐ¾Ð»ÑÐºÐ¾ ÐÐ)
+  // Блок "Добавление игрока" слева (только ГМ)
   const pm = document.getElementById('player-management');
   if (pm) pm.style.display = gm ? '' : 'none';
 
@@ -127,7 +127,7 @@ let finishInitiativeSent = false;
 // users map (ownerId -> {name, role})
 const usersById = new Map();
 
-// ÑÑÐ°ÑÑÐ¾Ð²Ð¾ Ð¿ÑÑÑÐµÐ¼ Ð¿Ð°Ð½ÐµÐ»Ñ Ð±ÑÐ¾ÑÐºÐ¾Ð² Ð´Ð¾ Ð²ÑÐ¾Ð´Ð° Ð² ÐºÐ¾Ð¼Ð½Ð°ÑÑ
+// стартово прячем панель бросков до входа в комнату
 if (diceViz) diceViz.style.display = 'none';
 
 // ================== JOIN GAME ==================
@@ -136,13 +136,13 @@ joinBtn.addEventListener('click', () => {
   const role = roleSelect.value;
 
   if (!name) {
-    loginError.textContent = "ÐÐ²ÐµÐ´Ð¸ÑÐµ Ð¸Ð¼Ñ";
+    loginError.textContent = "Введите имя";
     return;
   }
 
   // ===== Supabase init (GitHub Pages) =====
   if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
-    loginError.textContent = "Supabase Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½. ÐÑÐ¾Ð²ÐµÑÑÑÐµ SUPABASE_URL Ð¸ SUPABASE_ANON_KEY Ð² index.html";
+    loginError.textContent = "Supabase не настроен. Проверьте SUPABASE_URL и SUPABASE_ANON_KEY в index.html";
     return;
   }
 
@@ -209,7 +209,7 @@ loginDiv.style.display = 'none';
 
       applyRoleToUI();
 
-      // ÐÐÐÐ¦ÐÐÐÐÐÐÐ¦ÐÐ¯ ÐÐÐÐÐÐÐ "ÐÐÐ¤Ð"
+      // ИНИЦИАЛИЗАЦИЯ МОДАЛКИ "ИНФА"
       if (window.InfoModal?.init) {
         window.InfoModal.init({
           sendMessage,
@@ -220,14 +220,14 @@ loginDiv.style.display = 'none';
     }
 
     if (msg.type === "error") {
-      const text = String(msg.message || "ÐÑÐ¸Ð±ÐºÐ°");
-      // ÐµÑÐ»Ð¸ Ð¼Ñ ÐµÑÑ Ð½Ð° ÑÐºÑÐ°Ð½Ðµ Ð»Ð¾Ð³Ð¸Ð½Ð°
+      const text = String(msg.message || "Ошибка");
+      // если мы ещё на экране логина
       if (loginDiv && loginDiv.style.display !== 'none') {
         loginError.textContent = text;
       } else if (roomsDiv && roomsDiv.style.display !== 'none') {
         roomsError.textContent = text;
       } else {
-        // Ð² Ð¸Ð³ÑÐµ â Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ ÐºÐ°Ðº Ð±ÑÑÑÑÐ¾Ðµ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ
+        // в игре — показываем как быстрое уведомление
         alert(text);
       }
     }
@@ -239,7 +239,7 @@ loginDiv.style.display = 'none';
     }
 
     if (msg.type === "diceEvent" && msg.event) {
-      // Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð²ÑÐµÐ¼ "ÐÑÐ¾ÑÐºÐ¸ Ð´ÑÑÐ³Ð¸Ñ", Ð° ÑÐµÐ±Ðµ â Ð¾Ð±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ Ð¾ÑÐ½Ð¾Ð²Ð½ÑÑ Ð¿Ð°Ð½ÐµÐ»Ñ Ð±ÑÐ¾ÑÐºÐ°
+      // показываем всем "Броски других", а себе — обновляем основную панель броска
       if (msg.event.fromId && typeof myId !== "undefined" && msg.event.fromId === myId) {
         applyDiceEventToMain(msg.event);
       } else {
@@ -247,7 +247,7 @@ loginDiv.style.display = 'none';
       }
     }
 
-    // ===== Saved bases (Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶Ð¸, Ð¿ÑÐ¸Ð²ÑÐ·Ð°Ð½Ð½ÑÐµ Ðº userId) =====
+    // ===== Saved bases (персонажи, привязанные к userId) =====
     if (msg.type === "savedBasesList" && Array.isArray(msg.list)) {
       window.InfoModal?.onSavedBasesList?.(msg.list);
     }
@@ -266,7 +266,7 @@ loginDiv.style.display = 'none';
       boardWidth = msg.state.boardWidth;
       boardHeight = msg.state.boardHeight;
 
-      // Ð£Ð´Ð°Ð»ÑÐµÐ¼ DOM-ÑÐ»ÐµÐ¼ÐµÐ½ÑÑ Ð¸Ð³ÑÐ¾ÐºÐ¾Ð², ÐºÐ¾ÑÐ¾ÑÑÑ Ð±Ð¾Ð»ÑÑÐµ Ð½ÐµÑ Ð² ÑÐ¾ÑÑÐ¾ÑÐ½Ð¸Ð¸
+      // Удаляем DOM-элементы игроков, которых больше нет в состоянии
       const existingIds = new Set((msg.state.players || []).map(p => p.id));
       playerElements.forEach((el, id) => {
         if (!existingIds.has(id)) {
@@ -277,7 +277,7 @@ loginDiv.style.display = 'none';
 
       players = msg.state.players || [];
 
-      // ÐÑÐ½Ð¾Ð²Ð° Ð¾Ð´Ð½Ð° Ð½Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ â Ð±Ð»Ð¾ÐºÐ¸ÑÑÐµÐ¼ ÑÐµÐºÐ±Ð¾ÐºÑ
+      // Основа одна на пользователя — блокируем чекбокс
       if (isBaseCheckbox) {
         const baseExistsForMe = players.some(p => p.isBase && p.ownerId === myId);
         isBaseCheckbox.disabled = baseExistsForMe;
@@ -294,7 +294,7 @@ loginDiv.style.display = 'none';
       updateCurrentPlayer(msg.state);
       renderLog(msg.state.log || []);
 
-      // ÐµÑÐ»Ð¸ "ÐÐ½ÑÐ°" Ð¾ÑÐºÑÑÑÐ° â Ð¾Ð±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ ÐµÐµ Ð¿Ð¾ ÑÐ²ÐµÐ¶ÐµÐ¼Ñ state
+      // если "Инфа" открыта — обновляем ее по свежему state
       window.InfoModal?.refresh?.(players);
     }
 }
@@ -315,7 +315,7 @@ startCombatBtn?.addEventListener("click", () => {
 });
 
 nextTurnBtn?.addEventListener("click", () => {
-  // "ÐÐ¾Ð½ÐµÑ ÑÐ¾Ð´Ð°" â Ð¿ÐµÑÐµÐ¹ÑÐ¸ Ðº ÑÐ»ÐµÐ´ÑÑÑÐµÐ¼Ñ Ð¿Ð¾ Ð¸Ð½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ðµ
+  // "Конец хода" — перейти к следующему по инициативе
   sendMessage({ type: "endTurn" });
 });
 
@@ -325,10 +325,10 @@ function setupRoleUI(role) {
   const gm = (r === "GM");
   const spectator = (r === "Spectator");
 
-  // Ð²ÑÐµÐ³Ð´Ð° Ð¿ÑÐ¸Ð¼ÐµÐ½ÑÐµÐ¼ Ð¾ÑÐ½Ð¾Ð²Ð½ÑÑ Ð»Ð¾Ð³Ð¸ÐºÑ ÐÐ/Ð½Ðµ-ÐÐ
+  // всегда применяем основную логику ГМ/не-ГМ
   applyRoleToUI();
 
-  // ÐÐ°Ð±Ð»ÑÐ´Ð°ÑÐµÐ»Ñ â Ð¿ÑÑÑÐµÐ¼ Ð°ÐºÑÐ¸Ð²Ð½ÑÐµ ÑÐ»ÐµÐ¼ÐµÐ½ÑÑ ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½Ð¸Ñ
+  // Наблюдатель — прячем активные элементы управления
   if (spectator) {
     if (addPlayerBtn) addPlayerBtn.style.display = 'none';
     if (rollBtn) rollBtn.style.display = 'none';
@@ -339,7 +339,7 @@ function setupRoleUI(role) {
     if (clearBoardBtn) clearBoardBtn.style.display = 'none';
     if (nextTurnBtn) nextTurnBtn.style.display = 'none';
   } else {
-    // Ð¾ÑÑÐ°Ð»ÑÐ½ÑÐµ â Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ (Ð³Ð»Ð¾Ð±Ð°Ð»ÑÐ½ÑÐµ disabled ÑÐ¶Ðµ Ð²ÑÑÑÐ°Ð²Ð»ÐµÐ½Ñ Ð² applyRoleToUI)
+    // остальные — показываем (глобальные disabled уже выставлены в applyRoleToUI)
     if (addPlayerBtn) addPlayerBtn.style.display = '';
     if (rollBtn) rollBtn.style.display = '';
     if (endTurnBtn) endTurnBtn.style.display = '';
@@ -373,7 +373,7 @@ function renderLog(logs) {
 function updateCurrentPlayer(state) {
   const inCombat = (state && state.phase === 'combat');
 
-  // Ð¿Ð¾ ÑÐ¼Ð¾Ð»ÑÐ°Ð½Ð¸Ñ
+  // по умолчанию
   if (nextTurnBtn) {
     nextTurnBtn.style.display = inCombat ? 'inline-block' : 'none';
     nextTurnBtn.disabled = true;
@@ -392,7 +392,7 @@ function updateCurrentPlayer(state) {
 
   highlightCurrentTurn(id);
 
-  // ÐºÐ½Ð¾Ð¿ÐºÑ "Ð¡Ð»ÐµÐ´ÑÑÑÐ¸Ð¹ ÑÐ¾Ð´" Ð¼Ð¾Ð¶ÐµÑ Ð½Ð°Ð¶Ð¸Ð¼Ð°ÑÑ GM Ð¸Ð»Ð¸ Ð²Ð»Ð°Ð´ÐµÐ»ÐµÑ ÑÐµÐºÑÑÐµÐ³Ð¾ Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶Ð°
+  // кнопку "Следующий ход" может нажимать GM или владелец текущего персонажа
   if (nextTurnBtn) {
     const canNext = (myRole === 'GM') || (p && p.ownerId === myId);
     nextTurnBtn.disabled = !canNext;
@@ -432,7 +432,7 @@ function updatePlayerList() {
     ? lastState.turnOrder[lastState.currentTurnIndex]
     : null;
 
-  // Ð¡Ð½Ð°ÑÐ°Ð»Ð° ÑÐ¾Ð·Ð´Ð°ÑÐ¼ Ð³ÑÑÐ¿Ð¿Ñ Ð¿Ð¾ Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÑÐ¼ (Ð´Ð°Ð¶Ðµ ÐµÑÐ»Ð¸ Ñ Ð½Ð¸Ñ ÐµÑÑ Ð½ÐµÑ Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶ÐµÐ¹)
+  // Сначала создаём группы по пользователям (даже если у них ещё нет персонажей)
   const grouped = {};
   usersById.forEach((u, ownerId) => {
     grouped[ownerId] = {
@@ -441,7 +441,7 @@ function updatePlayerList() {
     };
   });
 
-  // ÐÐ¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶ÐµÐ¹ Ð² ÑÐ¾Ð¾ÑÐ²ÐµÑÑÑÐ²ÑÑÑÐ¸Ðµ Ð³ÑÑÐ¿Ð¿Ñ
+  // Добавляем персонажей в соответствующие группы
   players.forEach(p => {
     if (!grouped[p.ownerId]) {
       grouped[p.ownerId] = {
@@ -481,7 +481,7 @@ function updatePlayerList() {
       emptyLi.className = 'player-list-item';
       const text = document.createElement('span');
       text.classList.add('player-name-text');
-      text.textContent = 'ÐÐµÑÑÐ¾Ð½Ð°Ð¶ÐµÐ¹ Ð½ÐµÑ';
+      text.textContent = 'Персонажей нет';
       emptyLi.appendChild(text);
       ul.appendChild(emptyLi);
     }
@@ -512,7 +512,7 @@ function updatePlayerList() {
       if (p.isBase) {
         const baseBadge = document.createElement('span');
         baseBadge.className = 'base-badge';
-        baseBadge.textContent = 'Ð¾ÑÐ½Ð¾Ð²Ð°';
+        baseBadge.textContent = 'основа';
         nameWrap.appendChild(baseBadge);
       }
 
@@ -521,16 +521,16 @@ function updatePlayerList() {
       const actions = document.createElement('div');
       actions.className = 'player-actions';
 
-      // ===== ÐÐ¾Ð²ÑÐ¹ Ð¸Ð³ÑÐ¾Ðº Ð²Ð¾ Ð²ÑÐµÐ¼Ñ Ð±Ð¾Ñ: Ð²ÑÐ±Ð¾Ñ Ð¸Ð½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ñ (ÑÐ¾Ð»ÑÐºÐ¾ Ð´Ð»Ñ Ð½ÐµÐ³Ð¾) =====
+      // ===== Новый игрок во время боя: выбор инициативы (только для него) =====
       if (lastState && lastState.phase === 'combat' && p.pendingInitiativeChoice && (myRole === 'GM' || p.ownerId === myId)) {
         const box = document.createElement('div');
         box.className = 'init-choice-box';
 
         const rollInitBtn = document.createElement('button');
         rollInitBtn.className = 'init-choice-btn';
-        rollInitBtn.textContent = 'ÐÑÐ¾ÑÐ¸ÑÑ Ð¸Ð½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ñ';
+        rollInitBtn.textContent = 'Бросить инициативу';
         rollInitBtn.classList.add('mini-action-btn');
-        rollInitBtn.title = 'd20 + Ð¼Ð¾Ð´Ð¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ ÐÐ¾Ð²ÐºÐ¾ÑÑÐ¸';
+        rollInitBtn.title = 'd20 + модификатор Ловкости';
         rollInitBtn.onclick = (e) => {
           e.stopPropagation();
           sendMessage({ type: 'combatInitChoice', id: p.id, choice: 'roll' });
@@ -538,9 +538,9 @@ function updatePlayerList() {
 
         const baseInitBtn = document.createElement('button');
         baseInitBtn.className = 'init-choice-btn';
-        baseInitBtn.textContent = 'ÐÐ½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ð° Ð¾ÑÐ½Ð¾Ð²Ñ';
+        baseInitBtn.textContent = 'Инициатива основы';
         baseInitBtn.classList.add('mini-action-btn');
-        baseInitBtn.title = 'ÐÐ·ÑÑÑ Ð¸Ð½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ñ Ð¸Ð· Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶Ð° "Ð¾ÑÐ½Ð¾Ð²Ð°" Ð²Ð»Ð°Ð´ÐµÐ»ÑÑÐ°';
+        baseInitBtn.title = 'Взять инициативу из персонажа "основа" владельца';
         baseInitBtn.onclick = (e) => {
           e.stopPropagation();
           sendMessage({ type: 'combatInitChoice', id: p.id, choice: 'base' });
@@ -551,10 +551,10 @@ function updatePlayerList() {
         actions.appendChild(box);
       }
 
-      // ÐÐÐÐÐÐ "ÐÐÐ¤Ð" â ÑÐµÐ¿ÐµÑÑ Ð²ÑÐ·ÑÐ²Ð°ÐµÑ Ð²Ð½ÐµÑÐ½Ð¸Ð¹ Ð¼Ð¾Ð´ÑÐ»Ñ
+      // КНОПКА "ИНФА" — теперь вызывает внешний модуль
       if (p.isBase) {
         const infoBtn = document.createElement('button');
-        infoBtn.textContent = 'ÐÐ½ÑÐ°';
+        infoBtn.textContent = 'Инфа';
         infoBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           window.InfoModal?.open?.(p);
@@ -562,7 +562,7 @@ function updatePlayerList() {
         actions.appendChild(infoBtn);
       }
 
-      // Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ðµ ÑÐ°Ð·Ð¼ÐµÑÐ°
+      // изменение размера
       if (myRole === "GM" || p.ownerId === myId) {
         const sizeSelect = document.createElement('select');
         sizeSelect.className = 'size-select';
@@ -589,7 +589,7 @@ function updatePlayerList() {
           const size = Number(p.size) || 1;
           const spot = findFirstFreeSpotClient(size);
           if (!spot) {
-            alert("ÐÐµÑ ÑÐ²Ð¾Ð±Ð¾Ð´Ð½ÑÑ ÐºÐ»ÐµÑÐ¾Ðº Ð´Ð»Ñ ÑÐ°Ð·Ð¼ÐµÑÐµÐ½Ð¸Ñ Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶Ð°");
+            alert("Нет свободных клеток для размещения персонажа");
             return;
           }
           sendMessage({ type: 'movePlayer', id: p.id, x: spot.x, y: spot.y });
@@ -598,14 +598,14 @@ function updatePlayerList() {
 
       if (myRole === "GM" || p.ownerId === myId) {
         const removeFromBoardBtn = document.createElement('button');
-        removeFromBoardBtn.textContent = 'Ð¡ Ð¿Ð¾Ð»Ñ';
+        removeFromBoardBtn.textContent = 'С поля';
         removeFromBoardBtn.onclick = (e) => {
           e.stopPropagation();
           sendMessage({ type: 'removePlayerFromBoard', id: p.id });
         };
 
         const removeCompletelyBtn = document.createElement('button');
-        removeCompletelyBtn.textContent = 'Ð£Ð´Ð°Ð»Ð¸ÑÑ';
+        removeCompletelyBtn.textContent = 'Удалить';
         removeCompletelyBtn.onclick = (e) => {
           e.stopPropagation();
           sendMessage({ type: 'removePlayerCompletely', id: p.id });
@@ -729,7 +729,7 @@ function findFirstFreeSpotClient(size) {
 // ================== ADD PLAYER ==================
 addPlayerBtn.addEventListener('click', () => {
   const name = playerNameInput.value.trim();
-  if (!name) return alert("ÐÐ²ÐµÐ´Ð¸ÑÐµ Ð¸Ð¼Ñ");
+  if (!name) return alert("Введите имя");
 
   const player = {
     name,
@@ -755,10 +755,10 @@ board.addEventListener('click', e => {
   if (x + selectedPlayer.size > boardWidth) x = boardWidth - selectedPlayer.size;
   if (y + selectedPlayer.size > boardHeight) y = boardHeight - selectedPlayer.size;
 
-  // Ð±ÑÑÑÑÑÐ¹ Ð»Ð¾ÐºÐ°Ð»ÑÐ½ÑÐ¹ ÑÐµÐº (ÑÐµÑÐ²ÐµÑ Ð²ÑÑ ÑÐ°Ð²Ð½Ð¾ Ð¿ÑÐ¾Ð²ÐµÑÐ¸Ñ)
+  // быстрый локальный чек (сервер всё равно проверит)
   const size = Number(selectedPlayer.size) || 1;
   if (!isAreaFreeClient(selectedPlayer.id, x, y, size)) {
-    alert("Ð­ÑÐ° ÐºÐ»ÐµÑÐºÐ° Ð·Ð°Ð½ÑÑÐ° Ð´ÑÑÐ³Ð¸Ð¼ Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶ÐµÐ¼");
+    alert("Эта клетка занята другим персонажем");
     return;
   }
 
@@ -785,12 +785,12 @@ function ensureOthersDiceUI() {
 
   othersDiceWrap = document.createElement("div");
   othersDiceWrap.className = "dice-others";
-  othersDiceWrap.innerHTML = `<div class="dice-others__title">ÐÑÐ¾ÑÐºÐ¸ Ð´ÑÑÐ³Ð¸Ñ</div>`;
+  othersDiceWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
   document.body.appendChild(othersDiceWrap);
   return othersDiceWrap;
 }
 
-// Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ ÑÐµÐ·ÑÐ»ÑÑÐ°Ñ Ð±ÑÐ¾ÑÐºÐ° Ð² Ð¾ÑÐ½Ð¾Ð²Ð½Ð¾Ð¹ Ð¿Ð°Ð½ÐµÐ»Ð¸ (Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑÑÑ Ð´Ð»Ñ ÑÐµÑÐ²ÐµÑÐ½ÑÑ Ð¸Ð½Ð¸ÑÐ¸Ð°ÑÐ¸Ð² Ð¸ Ñ.Ð¿.)
+// показываем результат броска в основной панели (используется для серверных инициатив и т.п.)
 async function applyDiceEventToMain(ev) {
   if (!ev) return;
 
@@ -798,21 +798,21 @@ async function applyDiceEventToMain(ev) {
   const count = Number(ev.count) || 1;
   const bonus = Number(ev.bonus) || 0;
 
-  // Ð¿Ð¾Ð´Ð¿Ð¸ÑÑ
+  // подпись
   if (diceVizKind) {
-    diceVizKind.textContent = ev.kindText || (sides ? `d${sides}` : "ÐÑÐ¾ÑÐ¾Ðº");
+    diceVizKind.textContent = ev.kindText || (sides ? `d${sides}` : "Бросок");
   }
 
-  // Ð·Ð½Ð°ÑÐµÐ½Ð¸Ðµ â Ð¸ÑÐ¾Ð³ (Ñ Ð±Ð¾Ð½ÑÑÐ¾Ð¼)
+  // значение — итог (с бонусом)
   if (diceVizValue) {
     diceVizValue.textContent = String(Number(ev.total) || 0);
   }
 
-  // ÑÐ¸ÑÐºÐ¸ â ÑÐ¾Ð»ÑÐºÐ¾ "ÑÑÑÐ¾Ð¹" ÐºÑÐ±Ð¸Ðº (rolls)
+  // фишки — только "сырой" кубик (rolls)
   const rolls = Array.isArray(ev.rolls) ? ev.rolls.map(n => Number(n) || 0) : [];
   renderRollChips(rolls.length ? rolls : [Number(ev.total) || 0], -1, sides);
 
-  // Ð°Ð½Ð¸Ð¼Ð°ÑÐ¸Ñ ÐºÑÐ±Ð¸ÐºÐ° (ÐºÐ°Ðº Ð¿ÑÐ¸ Ð¾Ð±ÑÑÐ½Ð¾Ð¼ "ÐÑÐ¾ÑÐ¸ÑÑ")
+  // анимация кубика (как при обычном "Бросить")
   if (!diceAnimBusy && diceCtx && diceCanvas && sides && rolls.length) {
     diceAnimBusy = true;
     try {
@@ -824,7 +824,7 @@ async function applyDiceEventToMain(ev) {
     }
   }
 
-  // ÐºÑÐ¸Ñ-Ð¿Ð¾Ð´ÑÐ²ÐµÑÐºÑ Ð¾ÑÑÐ°Ð²Ð»ÑÐµÐ¼ ÑÐ¾Ð»ÑÐºÐ¾ Ð´Ð»Ñ ÑÐ¸ÑÑÐ¾Ð³Ð¾ d20 (Ð±ÐµÐ· Ð±Ð¾Ð½ÑÑÐ°)
+  // крит-подсветку оставляем только для чистого d20 (без бонуса)
   if (sides === 20 && count === 1 && bonus === 0 && rolls.length === 1) {
     applyPureD20CritUI(rolls[0]);
   } else {
@@ -835,7 +835,7 @@ async function applyDiceEventToMain(ev) {
 function pushOtherDiceEvent(ev) {
   ensureOthersDiceUI();
 
-  // Ð½Ðµ Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ ÑÐ²Ð¾Ð¸ Ð¶Ðµ Ð±ÑÐ¾ÑÐºÐ¸
+  // не показываем свои же броски
   if (ev.fromId && typeof myId !== "undefined" && ev.fromId === myId) return;
 
   const item = document.createElement("div");
@@ -846,9 +846,9 @@ function pushOtherDiceEvent(ev) {
     ? ev.rolls.join(" + ")
     : "-";
 
-  const head = `${ev.fromName || "ÐÐ³ÑÐ¾Ðº"}: ${ev.kindText || `d${ev.sides} Ã ${ev.count}`}`;
+  const head = `${ev.fromName || "Игрок"}: ${ev.kindText || `d${ev.sides} × ${ev.count}`}`;
 
-  // ÐÐ»Ñ Ð¾Ð´Ð¸Ð½Ð¾ÑÐ½Ð¾Ð³Ð¾ Ð±ÑÐ¾ÑÐºÐ° Ñ Ð±Ð¾Ð½ÑÑÐ¾Ð¼ Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ ÐºÐ¾Ð¼Ð¿Ð°ÐºÑÐ½Ð¾: "12+4=16"
+  // Для одиночного броска с бонусом показываем компактно: "12+4=16"
   let tail = `${rollsText} = ${ev.total}`;
   const bonusNum = Number(ev.bonus) || 0;
   if (Number(ev.count) === 1 && bonusNum !== 0 && Array.isArray(ev.rolls) && ev.rolls.length === 1) {
@@ -862,18 +862,18 @@ function pushOtherDiceEvent(ev) {
     <div class="dice-others__body">${escapeHtmlLocal(tail)}</div>
   `;
 
-  // ÐºÑÐ¸Ñ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐºÐ° (ÐµÑÐ»Ð¸ Ð¿ÑÐ¸Ð»ÐµÑÐµÐ»Ð¾)
+  // крит подсветка (если прилетело)
   if (ev.crit === "crit-fail") item.classList.add("crit-fail");
   if (ev.crit === "crit-success") item.classList.add("crit-success");
 
   othersDiceWrap.appendChild(item);
 
-  // ÑÐµÑÐµÐ· 5Ñ â Ð¿Ð»Ð°Ð²Ð½Ð¾Ðµ Ð¸ÑÑÐµÐ·Ð½Ð¾Ð²ÐµÐ½Ð¸Ðµ
+  // через 5с — плавное исчезновение
   setTimeout(() => item.classList.add("fade"), 4200);
   setTimeout(() => item.remove(), 5200);
 }
 
-// Ð¼Ð°Ð»ÐµÐ½ÑÐºÐ¸Ð¹ ÑÐºÑÐ°Ð½Ð¸ÑÐ¾Ð²ÑÐ¸Ðº
+// маленький экранировщик
 function escapeHtmlLocal(s) {
   return String(s)
     .replaceAll("&", "&amp;")
@@ -895,21 +895,21 @@ function clearCritUI() {
 }
 
 function applyPureD20CritUI(finalValue) {
-  // ÐºÑÐ¸Ñ ÑÐ¾Ð»ÑÐºÐ¾ Ð´Ð»Ñ "ÑÐ¸ÑÑÐ¾Ð³Ð¾" d20 (Ð±ÐµÐ· Ð±Ð¾Ð½ÑÑÐ°), Ð¿Ð¾ÑÑÐ¾Ð¼Ñ ÑÑÐ´Ð° Ð¿ÐµÑÐµÐ´Ð°ÑÐ¼ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ðµ ÐºÐ¾Ð³Ð´Ð° ÑÑÐ»Ð¾Ð²Ð¸Ñ ÑÐ¶Ðµ Ð¿ÑÐ¾Ð²ÐµÑÐµÐ½Ñ
+  // крит только для "чистого" d20 (без бонуса), поэтому сюда передаём значение когда условия уже проверены
   clearCritUI();
 
   if (finalValue === 1) {
     if (diceVizValue) diceVizValue.classList.add("crit-fail");
     const chip = diceRolls?.querySelector(".dice-chip");
     if (chip) chip.classList.add("crit-fail");
-    return " â ÐÐ ÐÐ¢ÐÐ§ÐÐ¡ÐÐÐ ÐÐ ÐÐÐÐ (1)";
+    return " — КРИТИЧЕСКИЙ ПРОВАЛ (1)";
   }
 
   if (finalValue === 20) {
     if (diceVizValue) diceVizValue.classList.add("crit-success");
     const chip = diceRolls?.querySelector(".dice-chip");
     if (chip) chip.classList.add("crit-success");
-    return " â ÐÐ ÐÐ¢ÐÐ§ÐÐ¡ÐÐÐ Ð£Ð¡ÐÐÐ¥ (20)";
+    return " — КРИТИЧЕСКИЙ УСПЕХ (20)";
   }
 
   return "";
@@ -943,7 +943,7 @@ function drawDieFace(ctx, w, h, sides, value, t) {
   const cx = w / 2;
   const cy = h / 2;
 
-  // Ð»ÑÐ³ÐºÐ°Ñ ÑÑÑÑÐºÐ°/Ð²ÑÐ°ÑÐµÐ½Ð¸Ðµ
+  // лёгкая тряска/вращение
   const ang = Math.sin(t * 0.02) * 0.22;
   const scale = 1 + Math.sin(t * 0.015) * 0.02;
 
@@ -958,14 +958,14 @@ function drawDieFace(ctx, w, h, sides, value, t) {
   const rh = h - pad * 2;
   const r = 18;
 
-  // ÑÐµÐ½Ñ
+  // тень
   ctx.globalAlpha = 0.35;
   ctx.fillStyle = "#000";
   roundRect(ctx, pad + 3, pad + 6, rw, rh, r);
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  // ÑÐµÐ»Ð¾
+  // тело
   ctx.fillStyle = "rgba(255,255,255,0.06)";
   ctx.strokeStyle = "rgba(255,255,255,0.20)";
   ctx.lineWidth = 2;
@@ -973,13 +973,13 @@ function drawDieFace(ctx, w, h, sides, value, t) {
   ctx.fill();
   ctx.stroke();
 
-  // Ð¿Ð¾Ð´Ð¿Ð¸ÑÑ dN
+  // подпись dN
   ctx.fillStyle = "rgba(255,255,255,0.70)";
   ctx.font = "bold 14px sans-serif";
   ctx.textAlign = "center";
   ctx.fillText(`d${sides}`, cx, pad + 26);
 
-  // Ð·Ð½Ð°ÑÐµÐ½Ð¸Ðµ
+  // значение
   ctx.fillStyle = "rgba(255,255,255,0.95)";
   ctx.font = "900 46px sans-serif";
   ctx.fillText(String(value), cx, cy + 18);
@@ -993,18 +993,18 @@ function renderRollChips(values, activeIndex, sides = null) {
   values.forEach((v, i) => {
     const chip = document.createElement("span");
     chip.className = "dice-chip" + (i === activeIndex ? " active" : "");
-    // â ÐÐ¾Ð´ÑÐ²ÐµÑÐºÐ° 1 Ð¸ 20 Ð´Ð»Ñ Ð»ÑÐ±Ð¾Ð³Ð¾ ÐºÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð° Ð¾Ð´Ð½Ð¾Ð²ÑÐµÐ¼ÐµÐ½Ð½Ð¾ Ð±ÑÐ¾ÑÐµÐ½Ð½ÑÑ d20
+    // ✅ Подсветка 1 и 20 для любого количества одновременно брошенных d20
     if (Number(sides) === 20 && v !== null) {
       if (v === 1) chip.classList.add('crit-fail');
       if (v === 20) chip.classList.add('crit-success');
     }
-    chip.textContent = (v === null ? "â¦" : String(v));
+    chip.textContent = (v === null ? "…" : String(v));
     diceRolls.appendChild(chip);
   });
 }
 
 function animateSingleRoll(sides, finalValue) {
-  // ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑ Promise, ÑÑÐ¾Ð±Ñ Ð¼Ð¾Ð¶Ð½Ð¾ Ð±ÑÐ»Ð¾ ÐºÐ¸Ð´Ð°ÑÑ Ð½ÐµÑÐºÐ¾Ð»ÑÐºÐ¾ ÐºÑÐ±Ð¾Ð² Ð¿Ð¾ Ð¾ÑÐµÑÐµÐ´Ð¸
+  // Возвращает Promise, чтобы можно было кидать несколько кубов по очереди
   return new Promise((resolve) => {
     if (!diceCtx || !diceCanvas) {
       resolve();
@@ -1012,7 +1012,7 @@ function animateSingleRoll(sides, finalValue) {
     }
 
     const start = performance.now();
-    const dur = 420; // ms Ð½Ð° Ð¾Ð´Ð¸Ð½ ÐºÑÐ±Ð¸Ðº
+    const dur = 420; // ms на один кубик
     let lastShown = rollDie(sides);
 
     function frame(now) {
@@ -1045,14 +1045,14 @@ function ensureDiceOthersUI() {
 
   diceOthersWrap = document.createElement('div');
   diceOthersWrap.className = 'dice-others';
-  diceOthersWrap.innerHTML = `<div class="dice-others__title">ÐÑÐ¾ÑÐºÐ¸ Ð´ÑÑÐ³Ð¸Ñ</div>`;
+  diceOthersWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
   document.body.appendChild(diceOthersWrap);
 
   return diceOthersWrap;
 }
 
 function pushOtherDice(ev) {
-  // Ð½Ðµ Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ ÑÐ²Ð¾Ð¸ Ð¶Ðµ Ð±ÑÐ¾ÑÐºÐ¸
+  // не показываем свои же броски
   if (ev?.fromId && typeof myId !== 'undefined' && ev.fromId === myId) return;
 
   ensureDiceOthersUI();
@@ -1063,10 +1063,10 @@ function pushOtherDice(ev) {
   if (ev.crit === 'crit-fail') item.classList.add('crit-fail');
   if (ev.crit === 'crit-success') item.classList.add('crit-success');
 
-  const head = `${ev.fromName || 'ÐÐ³ÑÐ¾Ðº'}: ${ev.kindText || `d${ev.sides} Ã ${ev.count}`}`;
+  const head = `${ev.fromName || 'Игрок'}: ${ev.kindText || `d${ev.sides} × ${ev.count}`}`;
   const rollsText = (ev.rolls && ev.rolls.length) ? ev.rolls.join(' + ') : '-';
 
-  // ÐÐ»Ñ Ð¾Ð´Ð¸Ð½Ð¾ÑÐ½Ð¾Ð³Ð¾ Ð±ÑÐ¾ÑÐºÐ° Ñ Ð±Ð¾Ð½ÑÑÐ¾Ð¼ Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ ÐºÐ¾Ð¼Ð¿Ð°ÐºÑÐ½Ð¾: "12+4=16"
+  // Для одиночного броска с бонусом показываем компактно: "12+4=16"
   let body = `${rollsText} = ${ev.total}`;
   const bonusNum = Number(ev.bonus) || 0;
   if (Number(ev.count) === 1 && bonusNum !== 0 && Array.isArray(ev.rolls) && ev.rolls.length === 1) {
@@ -1082,12 +1082,12 @@ function pushOtherDice(ev) {
 
   diceOthersWrap.appendChild(item);
 
-  // Ð·Ð°ÑÑÑÐ°Ð½Ð¸Ðµ Ð¸ ÑÐ´Ð°Ð»ÐµÐ½Ð¸Ðµ
+  // затухание и удаление
   setTimeout(() => item.classList.add('fade'), 4200);
   setTimeout(() => item.remove(), 5200);
 }
 
-// Ð¼Ð°Ð»ÐµÐ½ÑÐºÐ¸Ð¹ ÑÐºÑÐ°Ð½Ð¸ÑÐ¾Ð²ÑÐ¸Ðº (ÑÑÐ¾Ð±Ñ Ð¸Ð¼ÐµÐ½Ð° Ð½Ðµ Ð»Ð¾Ð¼Ð°Ð»Ð¸ HTML)
+// маленький экранировщик (чтобы имена не ломали HTML)
 function escapeHtmlLocal(s) {
   return String(s)
     .replaceAll("&", "&amp;")
@@ -1111,7 +1111,7 @@ window.DicePanel.roll = async ({ sides = 20, count = 1, bonus = 0, kindText = nu
   const C = clampInt(count, 1, 20, 1);
   const B = Number(bonus) || 0;
 
-  // ÑÑÐ¾Ð±Ñ UI Ð¿Ð°Ð½ÐµÐ»Ð¸ ÑÐ¾Ð¾ÑÐ²ÐµÑÑÑÐ²Ð¾Ð²Ð°Ð» Ð±ÑÐ¾ÑÐºÑ
+  // чтобы UI панели соответствовал броску
   if (dice) dice.value = String(S);
   if (diceCountInput) diceCountInput.value = String(C);
 
@@ -1122,8 +1122,8 @@ window.DicePanel.roll = async ({ sides = 20, count = 1, bonus = 0, kindText = nu
 
   renderRollChips(shown, 0, S);
 
-  if (diceVizKind) diceVizKind.textContent = kindText ? String(kindText) : `d${S} Ã ${C}`;
-  if (diceVizValue) diceVizValue.textContent = "â¦";
+  if (diceVizKind) diceVizKind.textContent = kindText ? String(kindText) : `d${S} × ${C}`;
+  if (diceVizValue) diceVizValue.textContent = "…";
 
   for (let i = 0; i < C; i++) {
     renderRollChips(shown, i, S);
@@ -1135,11 +1135,11 @@ window.DicePanel.roll = async ({ sides = 20, count = 1, bonus = 0, kindText = nu
   const sum = finals.reduce((a, b) => a + b, 0);
   const total = sum + B;
 
-// ÐÐ¾ÐºÐ°Ð· Ð·Ð½Ð°ÑÐµÐ½Ð¸Ñ
+// Показ значения
 if (diceVizValue) diceVizValue.textContent = String(total);
 renderRollChips(shown, -1, S);
 
-// â ÐºÑÐ¸Ñ-Ð¿Ð¾Ð´ÑÐ²ÐµÑÐºÐ° Ð¢ÐÐÐ¬ÐÐ Ð´Ð»Ñ ÑÐ¸ÑÑÐ¾Ð³Ð¾ d20 (Ð±ÐµÐ· Ð±Ð¾Ð½ÑÑÐ°)
+// ✅ крит-подсветка ТОЛЬКО для чистого d20 (без бонуса)
 let critNote = "";
 if (S === 20 && C === 1 && B === 0) {
   critNote = applyPureD20CritUI(finals[0]);
@@ -1147,20 +1147,20 @@ if (S === 20 && C === 1 && B === 0) {
   clearCritUI();
 }
 
-  // Ð² Ð»Ð¾Ð³ â ÑÐ¾Ð¶Ðµ Ð¾ÑÐ¿ÑÐ°Ð²Ð¸Ð¼ (ÐµÑÐ»Ð¸ Ð½Ðµ silent)
+  // в лог — тоже отправим (если не silent)
   if (!silent) {
     try {
       if (typeof sendMessage === "function") {
         const bonusTxt = B ? ` ${B >= 0 ? "+" : "-"} ${Math.abs(B)}` : "";
         sendMessage({
           type: 'log',
-          text: `${kindText || `ÐÑÐ¾ÑÐ¾Ðº d${S} Ã ${C}`}: ${finals.join(' + ')} = ${sum}${bonusTxt} => ${total}${critNote}`
+          text: `${kindText || `Бросок d${S} × ${C}`}: ${finals.join(' + ')} = ${sum}${bonusTxt} => ${total}${critNote}`
         });
 
         sendMessage({
           type: "diceEvent",
           event: {
-            kindText: kindText ? String(kindText) : `d${S} Ã ${C}`,
+            kindText: kindText ? String(kindText) : `d${S} × ${C}`,
             sides: S,
             count: C,
             bonus: B,
@@ -1191,16 +1191,16 @@ rollBtn?.addEventListener('click', async () => {
 
   clearCritUI();
 
-  // ÐÑÐ¾Ð³Ð¾Ð²ÑÐµ Ð·Ð½Ð°ÑÐµÐ½Ð¸Ñ Ð·Ð°ÑÐ°Ð½ÐµÐµ
+  // Итоговые значения заранее
   const finals = Array.from({ length: count }, () => rollDie(sides));
   const shown = Array.from({ length: count }, () => null);
 
   renderRollChips(shown, 0, sides);
 
-  if (diceVizKind) diceVizKind.textContent = `d${sides} Ã ${count}`;
-  if (diceVizValue) diceVizValue.textContent = "â¦";
+  if (diceVizKind) diceVizKind.textContent = `d${sides} × ${count}`;
+  if (diceVizValue) diceVizValue.textContent = "…";
 
-  // ÐÐ½Ð¸Ð¼Ð°ÑÐ¸Ñ: Ð¿Ð¾ Ð¾Ð´Ð½Ð¾Ð¼Ñ ÐºÑÐ±Ð¸ÐºÑ (Ð²Ð¸Ð´Ð½Ð¾ Ð¿ÑÐ¾ÑÐµÑÑ)
+  // Анимация: по одному кубику (видно процесс)
   for (let i = 0; i < count; i++) {
     renderRollChips(shown, i, sides);
     await animateSingleRoll(sides, finals[i]);
@@ -1210,12 +1210,12 @@ rollBtn?.addEventListener('click', async () => {
 
 const sum = finals.reduce((a, b) => a + b, 0);
 
-// Ð±ÐµÐ· "Ð ÐµÐ·ÑÐ»ÑÑÐ°Ñ:" â ÑÐ¾Ð»ÑÐºÐ¾ ÑÐ¸ÑÐ»Ð¾
+// без "Результат:" — только число
 if (diceVizValue) diceVizValue.textContent = String(sum);
 
 renderRollChips(shown, -1, sides);
 
-// â ÐºÑÐ¸Ñ-Ð¿Ð¾Ð´ÑÐ²ÐµÑÐºÐ° Ð¢ÐÐÐ¬ÐÐ Ð´Ð»Ñ ÑÐ¸ÑÑÐ¾Ð³Ð¾ d20
+// ✅ крит-подсветка ТОЛЬКО для чистого d20
 let critNote = "";
 if (sides === 20 && count === 1) {
   critNote = applyPureD20CritUI(finals[0]);
@@ -1225,13 +1225,13 @@ if (sides === 20 && count === 1) {
 
 sendMessage({
   type: 'log',
-  text: `ÐÑÐ¾ÑÐ¾Ðº d${sides} Ã ${count}: ${finals.join(' + ')} = ${sum}${critNote}`
+  text: `Бросок d${sides} × ${count}: ${finals.join(' + ')} = ${sum}${critNote}`
 });
 
   sendMessage({
   type: "diceEvent",
   event: {
-    kindText: `d${sides} Ã ${count}`,
+    kindText: `d${sides} × ${count}`,
     sides,
     count,
     bonus: 0,
@@ -1252,13 +1252,13 @@ endTurnBtn?.addEventListener('click', () => sendMessage({ type: 'endTurn' }));
 
 // ================== INITIATIVE ==================
 rollInitiativeBtn.addEventListener('click', async () => {
-  // ÐÐ½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ð° ÑÑÐ¸ÑÐ°ÐµÑÑÑ Ð½Ð° ÑÐµÑÐ²ÐµÑÐµ (d20 + Ð¼Ð¾Ð´Ð¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ ÐÐ¾Ð²ÐºÐ¾ÑÑÐ¸).
-  // Ð¡ÐµÑÐ²ÐµÑ ÑÐ°ÑÑÑÐ»Ð°ÐµÑ diceEvent â Ð¼Ñ Ð¿Ð¾ÐºÐ°Ð¶ÐµÐ¼ ÐµÐ³Ð¾ Ñ ÑÐµÐ±Ñ Ð² Ð¿Ð°Ð½ÐµÐ»Ð¸ Ð¸ Ñ Ð´ÑÑÐ³Ð¸Ñ Ð² "ÐÑÐ¾ÑÐºÐ¸ Ð´ÑÑÐ³Ð¸Ñ".
-  // UX: ÑÑÐ°Ð·Ñ Ð¿Ð¾ÐºÐ°Ð·ÑÐ²Ð°ÐµÐ¼ Ð²Ð¸Ð·ÑÐ°Ð»ÑÐ½ÑÑ "Ð·Ð°Ð³Ð»ÑÑÐºÑ" Ð² Ð¿Ð°Ð½ÐµÐ»Ð¸ Ð±ÑÐ¾ÑÐºÐ°, ÑÑÐ¾Ð±Ñ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ðµ Ð±ÑÐ»Ð¾ Ð²Ð¸Ð´Ð½Ð¾ Ð¼Ð³Ð½Ð¾Ð²ÐµÐ½Ð½Ð¾.
+  // Инициатива считается на сервере (d20 + модификатор Ловкости).
+  // Сервер рассылает diceEvent — мы покажем его у себя в панели и у других в "Броски других".
+  // UX: сразу показываем визуальную "заглушку" в панели броска, чтобы действие было видно мгновенно.
   clearCritUI();
   renderRollChips([null], -1, 20);
-  if (diceVizKind) diceVizKind.textContent = 'ÐÐ½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ð°: d20';
-  if (diceVizValue) diceVizValue.textContent = 'â¦';
+  if (diceVizKind) diceVizKind.textContent = 'Инициатива: d20';
+  if (diceVizValue) diceVizValue.textContent = '…';
   sendMessage({ type: 'rollInitiative' });
 });
 
@@ -1268,7 +1268,7 @@ editEnvBtn.addEventListener('click', () => {
   addWallBtn.disabled = !editEnvironment;
   removeWallBtn.disabled = !editEnvironment;
   wallMode = null;
-  editEnvBtn.textContent = editEnvironment ? "Ð ÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ: ÐÐÐ" : "Ð ÐµÐ´Ð°ÐºÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ: ÐÐ«ÐÐ";
+  editEnvBtn.textContent = editEnvironment ? "Редактирование: ВКЛ" : "Редактирование: ВЫКЛ";
 });
 
 addWallBtn.addEventListener('click', () => wallMode = 'add');
@@ -1308,7 +1308,7 @@ createBoardBtn.addEventListener('click', () => {
   const width = parseInt(boardWidthInput.value, 10);
   const height = parseInt(boardHeightInput.value, 10);
   if (isNaN(width) || isNaN(height) || width < 1 || height < 1 || width > 20 || height > 20)
-    return alert("ÐÐ²ÐµÐ´Ð¸ÑÐµ ÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐµ ÑÐ°Ð·Ð¼ÐµÑÑ Ð¿Ð¾Ð»Ñ (1â20)");
+    return alert("Введите корректные размеры поля (1–20)");
   sendMessage({ type: 'resizeBoard', width, height });
 });
 
@@ -1410,7 +1410,7 @@ function logEventToState(state, text) {
 async function ensureSupabaseReady() {
   if (!sbClient) {
     if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
-      throw new Error("Supabase Ð½Ðµ Ð½Ð°ÑÑÑÐ¾ÐµÐ½");
+      throw new Error("Supabase не настроен");
     }
     sbClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
   }
@@ -1529,7 +1529,7 @@ async function sendMessage(msg) {
 
       case "createRoom": {
         const roomId = (crypto?.randomUUID ? crypto.randomUUID() : ("r-" + Math.random().toString(16).slice(2)));
-        const name = String(msg.name || "ÐÐ¾Ð¼Ð½Ð°ÑÐ°").trim() || "ÐÐ¾Ð¼Ð½Ð°ÑÐ°";
+        const name = String(msg.name || "Комната").trim() || "Комната";
         const scenario = String(msg.scenario || "");
         const { error: e1 } = await sbClient.from("rooms").insert({ id: roomId, name, scenario });
         if (e1) throw e1;
@@ -1563,13 +1563,13 @@ async function sendMessage(msg) {
           const { error: mErr } = await sbClient.from("room_members").upsert({
             room_id: roomId,
             user_id: userId,
-            name: uname || String(myNameSpan?.textContent || "").replace(/^\s*ÐÑ:\s*/i, "") || "Player",
+            name: uname || String(myNameSpan?.textContent || "").replace(/^\s*Вы:\s*/i, "") || "Player",
             role: normalizeRoleForDb(role)
           });
           if (mErr) {
             // Unique violation (second GM) => Postgres code 23505
             if (role === "GM" && (mErr.code === "23505" || String(mErr.message || "").includes("uq_one_gm_per_room"))) {
-              handleMessage({ type: "roomsError", message: "GM ÑÐ¶Ðµ Ð² ÐºÐ¾Ð¼Ð½Ð°ÑÐµ" });
+              handleMessage({ type: "roomsError", message: "GM уже в комнате" });
               return;
             }
             throw mErr;
@@ -1624,7 +1624,7 @@ async function sendMessage(msg) {
       case "saveSavedBase": {
         const userId = String(localStorage.getItem("dnd_user_id") || "");
         const sheet = msg.sheet;
-        const name = String(sheet?.parsed?.name?.value ?? sheet?.parsed?.name ?? sheet?.parsed?.profile?.name ?? "ÐÐµÑÑÐ¾Ð½Ð°Ð¶").trim() || "ÐÐµÑÑÐ¾Ð½Ð°Ð¶";
+        const name = String(sheet?.parsed?.name?.value ?? sheet?.parsed?.name ?? sheet?.parsed?.profile?.name ?? "Персонаж").trim() || "Персонаж";
         const { data, error } = await sbClient
           .from("characters")
           .insert({
@@ -1656,12 +1656,12 @@ async function sendMessage(msg) {
         const { data, error } = await sbClient.from("characters").select("state").eq("id", savedId).eq("user_id", userId).single();
         if (error) throw error;
         const savedSheet = data?.state?.data;
-        if (!savedSheet) throw new Error("ÐÑÑÑÐ¾Ð¹ ÑÐ°Ð¹Ð» Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶Ð°");
+        if (!savedSheet) throw new Error("Пустой файл персонажа");
 
         const next = deepClone(lastState);
         const p = (next.players || []).find(pl => pl.id === msg.playerId);
         if (!p || !p.isBase) {
-          handleMessage({ type: "error", message: "ÐÐ°Ð³ÑÑÐ¶Ð°ÑÑ Ð¼Ð¾Ð¶Ð½Ð¾ ÑÐ¾Ð»ÑÐºÐ¾ Ð² Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶Ð° 'ÐÑÐ½Ð¾Ð²Ð°'." });
+          handleMessage({ type: "error", message: "Загружать можно только в персонажа 'Основа'." });
           return;
         }
         p.sheet = deepClone(savedSheet);
@@ -1692,7 +1692,7 @@ async function sendMessage(msg) {
 
   p.sheet = deepClone(msg.sheet);
 
-  // ÑÐ¸Ð½ÑÑÐ¾Ð½Ð¸Ð·Ð¸ÑÑÐµÐ¼ Ð¸Ð¼Ñ Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶Ð° Ð¸Ð· sheet (ÐµÑÐ»Ð¸ ÐµÑÑÑ)
+  // синхронизируем имя персонажа из sheet (если есть)
   try {
     const parsed = p.sheet?.parsed;
     const nextName = parsed?.name?.value ?? parsed?.name;
@@ -1720,7 +1720,7 @@ async function sendMessage(msg) {
           if (!isGM) return;
           next.boardWidth = msg.width;
           next.boardHeight = msg.height;
-          logEventToState(next, "ÐÐ¾Ð»Ðµ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¾");
+          logEventToState(next, "Поле изменено");
         }
 
         else if (type === "startInitiative") {
@@ -1730,13 +1730,13 @@ async function sendMessage(msg) {
             p.initiative = null;
             p.hasRolledInitiative = false;
           });
-          logEventToState(next, "GM Ð½Ð°ÑÐ°Ð» ÑÐ°Ð·Ñ Ð¸Ð½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ñ");
+          logEventToState(next, "GM начал фазу инициативы");
         }
 
         else if (type === "startExploration") {
           if (!isGM) return;
           next.phase = "exploration";
-          logEventToState(next, "GM Ð½Ð°ÑÐ°Ð» ÑÐ°Ð·Ñ Ð¸ÑÑÐ»ÐµÐ´Ð¾Ð²Ð°Ð½Ð¸Ñ");
+          logEventToState(next, "GM начал фазу исследования");
         }
 
         else if (type === "addPlayer") {
@@ -1745,7 +1745,7 @@ async function sendMessage(msg) {
           if (isBase) {
             const exists = (next.players || []).some(p => p.isBase && p.ownerId === myUserId);
             if (exists) {
-              handleMessage({ type: "error", message: "Ð£ Ð²Ð°Ñ ÑÐ¶Ðµ ÐµÑÑÑ ÐÑÐ½Ð¾Ð²Ð°. ÐÐ¾Ð¶Ð½Ð¾ Ð¸Ð¼ÐµÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð¾Ð´Ð½Ñ Ð¾ÑÐ½Ð¾Ð²Ñ Ð½Ð° Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ." });
+              handleMessage({ type: "error", message: "У вас уже есть Основа. Можно иметь только одну основу на пользователя." });
               return;
             }
           }
@@ -1766,7 +1766,7 @@ async function sendMessage(msg) {
             ownerName: myNameSpan?.textContent || "",
             sheet: player.sheet || { parsed: { name: { value: player.name } } }
           });
-          logEventToState(next, `ÐÐ¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð¸Ð³ÑÐ¾Ðº ${player.name}`);
+          logEventToState(next, `Добавлен игрок ${player.name}`);
         }
 
         else if (type === "movePlayer") {
@@ -1787,13 +1787,13 @@ async function sendMessage(msg) {
           const ny = clamp(Number(msg.y) || 0, 0, maxY);
 
           if (!isAreaFree(next, p.id, nx, ny, size)) {
-            handleMessage({ type: "error", message: "Ð­ÑÐ° ÐºÐ»ÐµÑÐºÐ° Ð·Ð°Ð½ÑÑÐ° Ð´ÑÑÐ³Ð¸Ð¼ Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶ÐµÐ¼" });
+            handleMessage({ type: "error", message: "Эта клетка занята другим персонажем" });
             return;
           }
 
           p.x = nx;
           p.y = ny;
-          logEventToState(next, `${p.name} Ð¿ÐµÑÐµÐ¼ÐµÑÐµÐ½ Ð² (${p.x},${p.y})`);
+          logEventToState(next, `${p.name} перемещен в (${p.x},${p.y})`);
         }
 
         else if (type === "updatePlayerSize") {
@@ -1809,14 +1809,14 @@ async function sendMessage(msg) {
             const nx = clamp(p.x, 0, maxX);
             const ny = clamp(p.y, 0, maxY);
             if (!isAreaFree(next, p.id, nx, ny, newSize)) {
-              handleMessage({ type: "error", message: "ÐÐµÐ»ÑÐ·Ñ ÑÐ²ÐµÐ»Ð¸ÑÐ¸ÑÑ ÑÐ°Ð·Ð¼ÐµÑ: Ð¼ÐµÑÑÐ¾ Ð·Ð°Ð½ÑÑÐ¾" });
+              handleMessage({ type: "error", message: "Нельзя увеличить размер: место занято" });
               return;
             }
             p.x = nx;
             p.y = ny;
           }
           p.size = newSize;
-          logEventToState(next, `${p.name} Ð¸Ð·Ð¼ÐµÐ½Ð¸Ð» ÑÐ°Ð·Ð¼ÐµÑ Ð½Ð° ${p.size}x${p.size}`);
+          logEventToState(next, `${p.name} изменил размер на ${p.size}x${p.size}`);
         }
 
         else if (type === "removePlayerFromBoard") {
@@ -1825,7 +1825,7 @@ async function sendMessage(msg) {
           if (!isGM && !ownsPlayer(p)) return;
           p.x = null;
           p.y = null;
-          logEventToState(next, `${p.name} ÑÐ´Ð°Ð»ÐµÐ½ Ñ Ð¿Ð¾Ð»Ñ`);
+          logEventToState(next, `${p.name} удален с поля`);
         }
 
         else if (type === "removePlayerCompletely") {
@@ -1834,7 +1834,7 @@ async function sendMessage(msg) {
           if (!isGM && !ownsPlayer(p)) return;
           next.players = (next.players || []).filter(pl => pl.id !== msg.id);
           next.turnOrder = (next.turnOrder || []).filter(id => id !== msg.id);
-          logEventToState(next, `ÐÐ³ÑÐ¾Ðº ${p.name} Ð¿Ð¾Ð»Ð½Ð¾ÑÑÑÑ ÑÐ´Ð°Ð»ÐµÐ½`);
+          logEventToState(next, `Игрок ${p.name} полностью удален`);
         }
 
         else if (type === "addWall") {
@@ -1843,7 +1843,7 @@ async function sendMessage(msg) {
           if (!w) return;
           if (!(next.walls || []).find(x => x.x === w.x && x.y === w.y)) {
             next.walls.push({ x: w.x, y: w.y });
-            logEventToState(next, `Ð¡ÑÐµÐ½Ð° Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð° (${w.x},${w.y})`);
+            logEventToState(next, `Стена добавлена (${w.x},${w.y})`);
           }
         }
 
@@ -1852,7 +1852,7 @@ async function sendMessage(msg) {
           const w = msg.wall;
           if (!w) return;
           next.walls = (next.walls || []).filter(x => !(x.x === w.x && x.y === w.y));
-          logEventToState(next, `Ð¡ÑÐµÐ½Ð° ÑÐ´Ð°Ð»ÐµÐ½Ð° (${w.x},${w.y})`);
+          logEventToState(next, `Стена удалена (${w.x},${w.y})`);
         }
 
         else if (type === "rollInitiative") {
@@ -1872,7 +1872,7 @@ async function sendMessage(msg) {
                 event: {
                   fromId: myUserId,
                   fromName: p.name,
-                  kindText: `ÐÐ½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ð°: d20${dexMod >= 0 ? "+" : ""}${dexMod}`,
+                  kindText: `Инициатива: d20${dexMod >= 0 ? "+" : ""}${dexMod}`,
                   sides: 20,
                   count: 1,
                   bonus: dexMod,
@@ -1882,7 +1882,7 @@ async function sendMessage(msg) {
                 }
               });
               const sign = dexMod >= 0 ? "+" : "";
-              logEventToState(next, `${p.name} Ð±ÑÐ¾ÑÐ¸Ð» Ð¸Ð½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ñ: ${roll}${sign}${dexMod} = ${total}`);
+              logEventToState(next, `${p.name} бросил инициативу: ${roll}${sign}${dexMod} = ${total}`);
             });
         }
 
@@ -1891,7 +1891,7 @@ async function sendMessage(msg) {
           if (next.phase !== "initiative" && next.phase !== "placement" && next.phase !== "exploration") return;
           const allRolled = (next.players || []).length ? next.players.every(p => p.hasRolledInitiative) : false;
           if (!allRolled) {
-            handleMessage({ type: "error", message: "Ð¡Ð½Ð°ÑÐ°Ð»Ð° Ð±ÑÐ¾ÑÑÑÐµ Ð¸Ð½Ð¸ÑÐ¸Ð°ÑÐ¸Ð²Ñ Ð·Ð° Ð²ÑÐµÑ Ð¿ÐµÑÑÐ¾Ð½Ð°Ð¶ÐµÐ¹" });
+            handleMessage({ type: "error", message: "Сначала бросьте инициативу за всех персонажей" });
             return;
           }
           next.turnOrder = [...(next.players || [])]
@@ -1902,7 +1902,7 @@ async function sendMessage(msg) {
           next.currentTurnIndex = 0;
           const firstId = next.turnOrder[0];
           const first = (next.players || []).find(p => p.id === firstId);
-          logEventToState(next, `ÐÐ¾Ð¹ Ð½Ð°ÑÐ°Ð»ÑÑ. ÐÐµÑÐ²ÑÐ¹ ÑÐ¾Ð´: ${first?.name || '-'}`);
+          logEventToState(next, `Бой начался. Первый ход: ${first?.name || '-'}`);
         }
 
         else if (type === "endTurn") {
@@ -1931,7 +1931,7 @@ async function sendMessage(msg) {
           next.currentTurnIndex = wrapped ? 0 : nextIndex;
           const nid = next.turnOrder[next.currentTurnIndex];
           const np = (next.players || []).find(p => p.id === nid);
-          logEventToState(next, `Ð¥Ð¾Ð´ Ð¸Ð³ÑÐ¾ÐºÐ° ${np?.name || '-'}`);
+          logEventToState(next, `Ход игрока ${np?.name || '-'}`);
         }
 
         else if (type === "resetGame") {
@@ -1940,14 +1940,14 @@ async function sendMessage(msg) {
           next.walls = [];
           next.turnOrder = [];
           next.currentTurnIndex = 0;
-          next.log = ["ÐÐ³ÑÐ° Ð¿Ð¾Ð»Ð½Ð¾ÑÑÑÑ ÑÐ±ÑÐ¾ÑÐµÐ½Ð°"];
+          next.log = ["Игра полностью сброшена"];
         }
 
         else if (type === "clearBoard") {
           if (!isGM) return;
           (next.players || []).forEach(p => { p.x = null; p.y = null; });
           next.walls = [];
-          logEventToState(next, "ÐÐ¾Ð»Ðµ Ð¾ÑÐ¸ÑÐµÐ½Ð¾");
+          logEventToState(next, "Поле очищено");
         }
 
         else {
@@ -1961,7 +1961,7 @@ async function sendMessage(msg) {
     }
   } catch (e) {
     console.error(e);
-    const text = String(e?.message || e || "ÐÑÐ¸Ð±ÐºÐ°");
+    const text = String(e?.message || e || "Ошибка");
     handleMessage({ type: "error", message: text });
   }
 }
@@ -1971,7 +1971,7 @@ function updatePhaseUI(state) {
     ? state.players.every(p => p.hasRolledInitiative)
     : false;
 
-  // ÑÐ±ÑÐ°ÑÑÐ²Ð°ÐµÐ¼ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐºÐ¸
+  // сбрасываем подсветки
   startExplorationBtn?.classList.remove('active', 'ready', 'pending');
   startInitiativeBtn?.classList.remove('active', 'ready', 'pending');
   startCombatBtn?.classList.remove('active', 'ready', 'pending');
@@ -1992,7 +1992,7 @@ function updatePhaseUI(state) {
   } else if (state.phase === 'initiative') {
     startInitiativeBtn?.classList.add(allRolled ? 'ready' : 'active');
 
-    // Ð±Ð¾Ð¹ Ð¼Ð¾Ð¶Ð½Ð¾ Ð½Ð°ÑÐ°ÑÑ ÑÐ¾Ð»ÑÐºÐ¾ ÐºÐ¾Ð³Ð´Ð° Ð²ÑÐµ Ð±ÑÐ¾ÑÐ¸Ð»Ð¸
+    // бой можно начать только когда все бросили
     startCombatBtn.disabled = !allRolled;
     startCombatBtn.classList.add(allRolled ? 'pending' : 'active');
   } else if (state.phase === 'combat') {
@@ -2019,7 +2019,7 @@ function renderRooms(rooms) {
   roomsList.innerHTML = '';
 
   if (!rooms.length) {
-    roomsList.textContent = 'ÐÐ¾Ð¼Ð½Ð°Ñ Ð¿Ð¾ÐºÐ° Ð½ÐµÑ.';
+    roomsList.textContent = 'Комнат пока нет.';
     return;
   }
 
@@ -2043,8 +2043,8 @@ function renderRooms(rooms) {
     meta.style.fontSize = '12px';
     meta.style.color = '#aaa';
     meta.textContent =
-      `ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»ÐµÐ¹: ${r.uniqueUsers} â¢ ÐÐ°ÑÐ¾Ð»Ñ: ${r.hasPassword ? 'Ð´Ð°' : 'Ð½ÐµÑ'}`
-      + (r.scenario ? ` â¢ Ð¡ÑÐµÐ½Ð°ÑÐ¸Ð¹: ${r.scenario}` : '');
+      `Пользователей: ${r.uniqueUsers} • Пароль: ${r.hasPassword ? 'да' : 'нет'}`
+      + (r.scenario ? ` • Сценарий: ${r.scenario}` : '');
 
     left.appendChild(title);
     left.appendChild(meta);
@@ -2054,9 +2054,9 @@ function renderRooms(rooms) {
     right.style.gap = '8px';
 
     const joinBtn2 = document.createElement('button');
-    joinBtn2.textContent = 'ÐÐ¾Ð¹ÑÐ¸';
+    joinBtn2.textContent = 'Войти';
     joinBtn2.onclick = () => {
-      const pw = r.hasPassword ? prompt('ÐÐ°ÑÐ¾Ð»Ñ ÐºÐ¾Ð¼Ð½Ð°ÑÑ:') : '';
+      const pw = r.hasPassword ? prompt('Пароль комнаты:') : '';
       sendMessage({ type: 'joinRoom', roomId: r.id, password: pw || '' });
     };
 
@@ -2089,7 +2089,7 @@ if (createRoomSubmit) createRoomSubmit.addEventListener('click', () => {
   const scenario = roomScenarioInput.value.trim();
 
   if (!name) {
-    roomsError.textContent = 'ÐÐ²ÐµÐ´Ð¸ÑÐµ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ ÐºÐ¾Ð¼Ð½Ð°ÑÑ';
+    roomsError.textContent = 'Введите название комнаты';
     return;
   }
 
