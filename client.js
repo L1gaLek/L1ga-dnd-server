@@ -95,9 +95,18 @@ function applyRoleToUI() {
   const rightPanel = document.getElementById('right-panel');
   if (rightPanel) rightPanel.style.display = gm ? '' : 'none';
 
+  // На случай если блоки вынесены из right-panel — тоже прячем/показываем отдельно
+  if (typeof worldPhasesBox !== "undefined" && worldPhasesBox) {
+    worldPhasesBox.style.display = gm ? '' : 'none';
+  }
+  if (typeof envEditorBox !== "undefined" && envEditorBox) {
+    envEditorBox.style.display = gm ? '' : 'none';
+  }
+
   // Блок "Добавление игрока" слева (только ГМ)
   const pm = document.getElementById('player-management');
   if (pm) pm.style.display = gm ? '' : 'none';
+
 
   // Disable GM-only buttons defensively
   const gmOnlyIds = [
