@@ -2045,7 +2045,7 @@ async function sendMessage(msg) {
           }
         }
 
-type === "addWall") {
+(type === "addWall") {
           if (!isGM) return;
           const w = msg.wall;
           if (!w) return;
