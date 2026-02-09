@@ -1469,7 +1469,6 @@ clearBoardBtn.addEventListener('click', () => {
 });
 
 // ================== HELPER ==================
-*/
 
 function deepClone(obj) {
   try { return structuredClone(obj); } catch {}
