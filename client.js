@@ -24,6 +24,21 @@ const roomScenarioInput = document.getElementById('roomScenarioInput');
 
 const gameUI = document.getElementById('main-container');
 const myNameSpan = document.getElementById('myName');
+
+function safeGetUserName() {
+  const raw = localStorage.getItem("dnd_user_name");
+  const fromLs = (typeof raw === "string") ? raw.trim() : "";
+  if (fromLs) return fromLs;
+
+  // на случай, если localStorage ещё не заполнен
+  const inp = document.getElementById("username");
+  const fromInput = (inp && typeof inp.value === "string") ? inp.value.trim() : "";
+  if (fromInput) return fromInput;
+
+  const fromSpan = String(myNameSpan?.textContent || "").replace(/^\s*Вы:\s*/i, "").trim();
+  return fromSpan || "Player";
+}
+
 const myRoleSpan = document.getElementById('myRole');
 const myRoomSpan = document.getElementById('myRoom');
 const myScenarioSpan = document.getElementById('myScenario');
@@ -1572,7 +1587,7 @@ async function sendMessage(msg) {
           const { error: mErr } = await sbClient.from("room_members").upsert({
             room_id: roomId,
             user_id: userId,
-            name: safeGetUserName,
+            name: safeGetUserName(),
             role: normalizeRoleForDb(role),
             last_seen: new Date().toISOString()
                     });
