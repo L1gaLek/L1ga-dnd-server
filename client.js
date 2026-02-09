@@ -383,9 +383,9 @@ function highlightCurrentTurn(playerId) {
 
 // ================== PLAYER LIST ==================
 function normalizeRole(role) {
-  if (!role) return \"-\";
+  if (!role) return "-";
   // старое значение из index.html
-  if (role === \"Player\") return \"DnD-Player\";
+  if (role === "Player") return "DnD-Player";
   return String(role);
 }
 
