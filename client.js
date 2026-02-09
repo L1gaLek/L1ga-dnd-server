@@ -30,6 +30,7 @@ const myScenarioSpan = document.getElementById('myScenario');
 const diceViz = document.getElementById('dice-viz');
 
 const board = document.getElementById('game-board');
+const boardWrapper = document.getElementById('board-wrapper');
 const playerList = document.getElementById('player-list');
 const logList = document.getElementById('log-list');
 const currentPlayerSpan = document.getElementById('current-player');
@@ -117,6 +118,10 @@ function applyRoleToUI() {
   const rightPanel = document.getElementById('right-panel');
   if (rightPanel) rightPanel.style.display = gm ? '' : 'none';
 
+  // GM-настройки размера карты (реальный размер поля)
+  const gmBoardSettings = document.getElementById('board-settings-gm');
+  if (gmBoardSettings) gmBoardSettings.style.display = gm ? '' : 'none';
+
   // На случай если блоки вынесены из right-panel — тоже прячем/показываем отдельно
   if (typeof worldPhasesBox !== "undefined" && worldPhasesBox) {
     worldPhasesBox.style.display = gm ? '' : 'none';
@@ -132,7 +137,7 @@ function applyRoleToUI() {
 
   // Disable GM-only buttons defensively
   const gmOnlyIds = [
-    'create-board','clear-board','reset-game',
+    'clear-board','reset-game',
     'start-exploration','start-initiative','start-combat',
     'edit-environment','add-wall','remove-wall'
   ];
@@ -383,6 +388,9 @@ loginDiv.style.display = 'none';
       boardWidth = msg.state.boardWidth;
       boardHeight = msg.state.boardHeight;
 
+      // обновим GM-инпуты (если controlbox подключен)
+      try { window.ControlBox?.refreshGmInputsFromState?.(); } catch {}
+
       // Удаляем DOM-элементы игроков, которых больше нет в состоянии
       const existingIds = new Set((msg.state.players || []).map(p => p.id));
       playerElements.forEach((el, id) => {
@@ -416,21 +424,30 @@ loginDiv.style.display = 'none';
     }
 }
 
+/*
 startInitiativeBtn?.addEventListener("click", () => {
   if (!isGM()) return;
   sendMessage({ type: "startInitiative" });
 });
 
+
+*/
+/*
 startExplorationBtn?.addEventListener("click", () => {
   if (!isGM()) return;
   sendMessage({ type: "startExploration" });
 });
 
+
+*/
+/*
 startCombatBtn?.addEventListener("click", () => {
   if (!isGM()) return;
   sendMessage({ type: "startCombat" });
 });
 
+
+*/
 nextTurnBtn?.addEventListener("click", () => {
   // "Конец хода" — перейти к следующему по инициативе
   sendMessage({ type: "endTurn" });
@@ -1379,6 +1396,7 @@ rollInitiativeBtn.addEventListener('click', async () => {
   sendMessage({ type: 'rollInitiative' });
 });
 
+/*
 // ================== WALLS ==================
 editEnvBtn.addEventListener('click', () => {
   editEnvironment = !editEnvironment;
@@ -1391,92 +1409,39 @@ editEnvBtn.addEventListener('click', () => {
 addWallBtn.addEventListener('click', () => wallMode = 'add');
 removeWallBtn.addEventListener('click', () => wallMode = 'remove');
 
-// Чтобы "стена строилась за мышкой" без мигания/пропусков — батчим изменения и отправляем 1 сообщением по отпусканию.
-let wallDragVisited = new Set(); // "x,y"
-let wallDragCells = [];
-let wallPointerId = null;
-
-function wallKey(x, y) { return `${x},${y}`; }
-
-function pickCellFromPointer(e) {
-  const el = document.elementFromPoint(e.clientX, e.clientY);
-  return el ? el.closest?.('.cell') : null;
-}
-
-function applyWallLocal(cell) {
-  if (!cell) return;
-  const x = +cell.dataset.x, y = +cell.dataset.y;
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-
-  const key = wallKey(x, y);
-  if (wallDragVisited.has(key)) return;
-  wallDragVisited.add(key);
-  wallDragCells.push({ x, y });
-
-  // мгновенный UI-отклик
-  if (wallMode === 'add') cell.classList.add('wall');
-  else if (wallMode === 'remove') cell.classList.remove('wall');
-
-  // оптимистично обновим lastState, чтобы перерисовка не "откатывала" клетки
-  if (lastState) {
-    if (!Array.isArray(lastState.walls)) lastState.walls = [];
-    const idx = lastState.walls.findIndex(w => w && w.x === x && w.y === y);
-    if (wallMode === 'add') {
-      if (idx === -1) lastState.walls.push({ x, y });
-    } else if (wallMode === 'remove') {
-      if (idx !== -1) lastState.walls.splice(idx, 1);
-    }
-  }
-}
-
-function flushWallBatch() {
-  if (!wallDragCells.length) return;
-  // 1 запрос в базу вместо сотен — исчезают "мигания" и пропуски
-  sendMessage({ type: 'bulkWalls', mode: wallMode, cells: wallDragCells });
-  wallDragCells = [];
-  wallDragVisited = new Set();
-}
-
-board.addEventListener('pointerdown', (e) => {
+board.addEventListener('mousedown', e => {
   if (!editEnvironment || !wallMode) return;
   const cell = e.target.closest('.cell');
   if (!cell) return;
-
   mouseDown = true;
-  wallPointerId = e.pointerId;
-
-  wallDragVisited = new Set();
-  wallDragCells = [];
-
-  try { board.setPointerCapture?.(e.pointerId); } catch {}
-  applyWallLocal(cell);
+  toggleWall(cell);
 });
 
-board.addEventListener('pointermove', (e) => {
+board.addEventListener('mouseover', e => {
   if (!mouseDown || !editEnvironment || !wallMode) return;
-  if (wallPointerId != null && e.pointerId !== wallPointerId) return;
-
-  const cell = pickCellFromPointer(e);
-  applyWallLocal(cell);
+  const cell = e.target.closest('.cell');
+  if (!cell) return;
+  toggleWall(cell);
 });
 
-function stopWallDrag(e) {
-  if (!mouseDown) return;
-  if (wallPointerId != null && e && e.pointerId != null && e.pointerId !== wallPointerId) return;
+board.addEventListener('mouseup', () => { mouseDown = false; });
 
-  mouseDown = false;
-  try { if (wallPointerId != null) board.releasePointerCapture?.(wallPointerId); } catch {}
-  wallPointerId = null;
-
-  flushWallBatch();
+function toggleWall(cell) {
+  if (!cell) return;
+  const x = +cell.dataset.x, y = +cell.dataset.y;
+  if (wallMode === 'add') {
+    sendMessage({ type: 'addWall', wall: { x, y } });
+    cell.classList.add('wall');
+  } else if (wallMode === 'remove') {
+    sendMessage({ type: 'removeWall', wall: { x, y } });
+    cell.classList.remove('wall');
+  }
 }
 
-board.addEventListener('pointerup', stopWallDrag);
-board.addEventListener('pointercancel', stopWallDrag);
-// страховка: если отпустили кнопку вне поля
-window.addEventListener('pointerup', stopWallDrag);
-
+/*
 // ================== CREATE BOARD ==================
+*/
+
 createBoardBtn.addEventListener('click', () => {
   const width = parseInt(boardWidthInput.value, 10);
   const height = parseInt(boardHeightInput.value, 10);
@@ -1485,19 +1450,27 @@ createBoardBtn.addEventListener('click', () => {
   sendMessage({ type: 'resizeBoard', width, height });
 });
 
+/*
 // ================== RESET GAME ==================
+*/
+
 resetGameBtn.addEventListener('click', () => {
   playerElements.forEach(el => el.remove());
   playerElements.clear();
   sendMessage({ type: 'resetGame' });
 });
 
+/*
 // ================== CLEAR BOARD ==================
+*/
+
 clearBoardBtn.addEventListener('click', () => {
   sendMessage({ type: 'clearBoard' });
 });
 
 // ================== HELPER ==================
+*/
+
 function deepClone(obj) {
   try { return structuredClone(obj); } catch {}
   return JSON.parse(JSON.stringify(obj || null));
@@ -1505,8 +1478,8 @@ function deepClone(obj) {
 
 function createInitialGameState() {
   return {
-    boardWidth: 10,
-    boardHeight: 10,
+    boardWidth: 20,
+    boardHeight: 20,
     phase: "lobby",
     players: [],
     walls: [],
@@ -1792,24 +1765,16 @@ async function sendMessage(msg) {
 
       // ===== Dice live events =====
       case "diceEvent": {
-  if (!currentRoomId || !roomChannel) return;
-
-  const fromId = String(localStorage.getItem("dnd_user_id") || myId || "");
-  const fromName = String(localStorage.getItem("dnd_user_name") || myNameSpan?.textContent || "Player");
-  const event = Object.assign({}, msg.event || {});
-  if (!event.fromId) event.fromId = fromId;
-  if (!event.fromName) event.fromName = fromName;
-
-  await roomChannel.send({
-    type: "broadcast",
-    event: "diceEvent",
-    payload: { event }
-  });
-
-  // also apply to self instantly
-  handleMessage({ type: "diceEvent", event });
-  break;
-}
+        if (!currentRoomId || !roomChannel) return;
+        await roomChannel.send({
+          type: "broadcast",
+          event: "diceEvent",
+          payload: { event: msg.event }
+        });
+        // also apply to self instantly
+        if (msg.event) handleMessage({ type: "diceEvent", event: msg.event });
+        break;
+      }
 
       // ===== Saved bases (characters) =====
       case "listSavedBases": {
@@ -2040,38 +2005,47 @@ async function sendMessage(msg) {
           logEventToState(next, `Игрок ${p.name} полностью удален`);
         }
 
+        else if (
         else if (type === "bulkWalls") {
-  if (!isGM) return;
-  const mode = (msg.mode === "remove") ? "remove" : "add";
-  const cells = Array.isArray(msg.cells) ? msg.cells : [];
-  if (!Array.isArray(next.walls)) next.walls = [];
+          if (!isGM) return;
+          const mode = String(msg.mode || "");
+          const cells = Array.isArray(msg.cells) ? msg.cells : [];
+          if (!Array.isArray(next.walls)) next.walls = [];
+          // Используем Set для ускорения
+          const wallSet = new Set(next.walls.map(w => `${w.x},${w.y}`));
+          let changed = 0;
 
-  let changed = 0;
-  for (const c of cells) {
-    if (!c) continue;
-    const x = Number(c.x), y = Number(c.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          if (mode === "add") {
+            for (const c of cells) {
+              const x = Number(c?.x), y = Number(c?.y);
+              if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+              const k = `${x},${y}`;
+              if (wallSet.has(k)) continue;
+              wallSet.add(k);
+              next.walls.push({ x, y });
+              changed++;
+            }
+          } else if (mode === "remove") {
+            const removeSet = new Set();
+            for (const c of cells) {
+              const x = Number(c?.x), y = Number(c?.y);
+              if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+              removeSet.add(`${x},${y}`);
+            }
+            if (removeSet.size) {
+              next.walls = next.walls.filter(w => !removeSet.has(`${w.x},${w.y}`));
+              changed = removeSet.size;
+            }
+          } else {
+            return;
+          }
 
-    const idx = next.walls.findIndex(w => w && w.x === x && w.y === y);
-    if (mode === "add") {
-      if (idx === -1) {
-        next.walls.push({ x, y });
-        changed++;
-      }
-    } else {
-      if (idx !== -1) {
-        next.walls.splice(idx, 1);
-        changed++;
-      }
-    }
-  }
+          if (changed) {
+            logEventToState(next, `Окружение: ${mode === "add" ? "добавлено" : "удалено"} ${changed} стен`);
+          }
+        }
 
-  if (changed > 0) {
-    logEventToState(next, `Стены: ${mode === "add" ? "добавлено" : "удалено"} ${changed}`);
-  }
-}
-
-else if (type === "addWall") {
+type === "addWall") {
           if (!isGM) return;
           const w = msg.wall;
           if (!w) return;
@@ -2168,14 +2142,7 @@ else if (type === "addWall") {
           logEventToState(next, `Ход игрока ${np?.name || '-'}`);
         }
 
-        else if (type === "log") {
-  // текстовые события (для "Журнала действий"), должны видеть все
-  const t = (msg && typeof msg.text === "string") ? msg.text : "";
-  if (!t.trim()) return;
-  logEventToState(next, t.trim());
-}
-
-else if (type === "resetGame") {
+        else if (type === "resetGame") {
           if (!isGM) return;
           next.players = [];
           next.walls = [];
@@ -2337,3 +2304,25 @@ if (createRoomSubmit) createRoomSubmit.addEventListener('click', () => {
   sendMessage({ type: 'createRoom', name, password, scenario });
   closeCreateRoomModal();
 });
+
+
+// ================== CONTROLBOX INIT ==================
+try {
+  if (typeof window.initControlBox === 'function') {
+    window.initControlBox({
+      sendMessage,
+      isGM,
+      isSpectator,
+      getState: () => lastState,
+      onViewportChange: () => {
+        // При изменении рамки достаточно обновить CSS wrapper (controlbox делает это),
+        // а поле/игроки не нужно пересоздавать.
+      },
+      boardEl: board,
+      boardWrapperEl: boardWrapper
+    });
+  }
+} catch (e) {
+  console.warn("controlbox init failed", e);
+}
+
