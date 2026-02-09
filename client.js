@@ -387,8 +387,8 @@ function highlightCurrentTurn(playerId) {
 
 // ================== PLAYER LIST ==================
 function normalizeRole(role) {
-  if (!role) return \"-\";
-  if (role === \"Player\") return \"DnD-Player\";
+  if (!role) return "-";
+  if (role === "Player") return "DnD-Player";
   return String(role);
 }
 
