@@ -1469,6 +1469,7 @@ clearBoardBtn.addEventListener('click', () => {
 });
 
 // ================== HELPER ==================
+*/
 
 function deepClone(obj) {
   try { return structuredClone(obj); } catch {}
@@ -2004,7 +2005,6 @@ async function sendMessage(msg) {
           logEventToState(next, `Игрок ${p.name} полностью удален`);
         }
 
-        else if (
         else if (type === "bulkWalls") {
           if (!isGM) return;
           const mode = String(msg.mode || "");
@@ -2324,4 +2324,3 @@ try {
 } catch (e) {
   console.warn("controlbox init failed", e);
 }
-
