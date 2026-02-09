@@ -92,7 +92,7 @@ body {
 
   /* КЛЮЧЕВОЕ */
   margin: 0 auto;           /* ⬅ центрируем колонку */
-  max-width: fit-content;   /* ⬅ ширина = контент (поле) */
+  max-width: auto;   /* ⬅ ширина = контент (поле) */
 }
 
 /* Текущий игрок */
@@ -130,9 +130,9 @@ button:hover {
   padding: 2px;
 
   /* КЛЮЧЕВОЕ */
-  overflow: hidden;
-  width: fit-content;
-  height: fit-content;
+  overflow: auto;
+  width: auto;
+  height: auto;
 }
 
 /* Поле игры */
@@ -235,7 +235,7 @@ button:hover {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  width: fit-content;
+  width: auto;
 }
 
 #board-col #current-turn,
@@ -408,7 +408,7 @@ button:hover {
   font-size: 12px;
   line-height: 14px;
   white-space: nowrap;
-  overflow: hidden;
+  overflow: auto;
   text-overflow: ellipsis;
 }
 
@@ -544,7 +544,7 @@ button:hover {
   background: #1b1b1b;
   border: 1px solid #444;
   border-radius: 10px;
-  overflow: hidden;
+  overflow: auto;
   box-shadow: 0 10px 40px rgba(0,0,0,0.6);
   display: flex;
   flex-direction: column;
@@ -634,7 +634,7 @@ button:hover {
 .saved-bases-modal {
   width: min(720px, calc(100vw - 24px));
   max-height: min(640px, calc(100vh - 24px));
-  overflow: hidden;
+  overflow: auto;
   background: #111;
   border: 1px solid rgba(255,255,255,0.14);
   border-radius: 14px;
@@ -809,7 +809,7 @@ button:hover {
 
 .modal-body {
   padding: 0;              /* чтобы sidebar был встык */
-  overflow: hidden;        /* скролл будет внутри контента */
+  overflow: auto;        /* скролл будет внутри контента */
 
   /* FIX: чтобы правая часть модалки скроллилась ДО КОНЦА */
   display: flex;
@@ -909,7 +909,7 @@ button:hover {
 /* HP chip: "liquid" fill (shrinks right-to-left) */
 .sheet-chip--hp{
   position: relative;
-  overflow: hidden;
+  overflow: auto;
   --hp-fill-pct: 100%;
 }
 
@@ -1124,7 +1124,7 @@ button:hover {
   font-size: 12px;
   color: #eaeaea;
   white-space: nowrap;
-  overflow: hidden;
+  overflow: auto;
   text-overflow: ellipsis;
 }
 
@@ -1477,7 +1477,7 @@ button:hover {
   flex-direction:column;
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 /* шапка (hero) фиксированная, скролл — в правой части (sheet-main) */
@@ -2374,7 +2374,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   .weapons-list{ grid-template-columns: 1fr; }
 }
 
-.weapon-card{ overflow: hidden; }
+.weapon-card{ overflow: auto; }
 .weapon-head{
   display: grid;
   grid-template-columns: 1fr auto;
@@ -2448,7 +2448,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   padding: 0;
 
   /* ✅ ключевое: SVG не вылезает и кнопка не сжимается */
-  overflow: hidden;
+  overflow: auto;
   flex: 0 0 auto;
   line-height: 0;
 }
@@ -2512,7 +2512,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   opacity: .8;
   margin-bottom: 6px;
   white-space: nowrap;
-  overflow: hidden;
+  overflow: auto;
   text-overflow: ellipsis;
 }
 .weapon-fieldbox-inline{
@@ -2813,7 +2813,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   color: rgba(110,195,255,.95);
   cursor: pointer;
   padding: 0;
-  overflow: hidden;
+  overflow: auto;
   flex: 0 0 auto;
   line-height: 0;
 }
