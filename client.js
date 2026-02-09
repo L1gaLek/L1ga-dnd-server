@@ -275,7 +275,7 @@ if (msg.type === "registered") {
       myId = msg.id;
       localStorage.setItem("dnd_user_id", String(msg.id));
       localStorage.setItem("dnd_user_role", String(msg.role || ""));
-      localStorage.setItem(\"dnd_user_name\", String(msg.name || \"\"));
+      localStorage.setItem("dnd_user_name", String(msg.name || ""));
 myRole = msg.role;
       myNameSpan.textContent = msg.name;
       myRoleSpan.textContent = msg.role;
