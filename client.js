@@ -74,6 +74,28 @@ let roomChannel;    // broadcast/presence channel (optional)
 let roomDbChannel;  // postgres_changes channel
 let myId;
 let myRole;
+
+// ===== Role helpers (MVP) =====
+function isGM() { return String(myRole || '') === 'GM'; }
+function applyRoleToUI() {
+  const gm = isGM();
+  const rightPanel = document.getElementById('right-panel');
+  if (rightPanel) rightPanel.style.display = gm ? '' : 'none';
+
+  const pm = document.getElementById('player-management');
+  if (pm) pm.style.display = gm ? '' : 'none';
+
+  // Disable GM-only buttons defensively
+  const gmOnlyIds = [
+    'create-board','clear-board','reset-game',
+    'start-exploration','start-initiative','start-combat',
+    'edit-environment','add-wall','remove-wall'
+  ];
+  gmOnlyIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !gm;
+  });
+}
 let currentRoomId = null;
 let players = [];
 let lastState = null;
@@ -121,6 +143,7 @@ sbClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANO
   }));
 
   localStorage.setItem("dnd_user_id", String(userId));
+  localStorage.setItem("dnd_user_name", String(name));
   localStorage.setItem("dnd_user_role", String(role || ""));
 
   // In Supabase-MVP our "myId" is stable localStorage userId
@@ -262,14 +285,17 @@ loginDiv.style.display = 'none';
 }
 
 startInitiativeBtn?.addEventListener("click", () => {
+  if (!isGM()) return;
   sendMessage({ type: "startInitiative" });
 });
 
 startExplorationBtn?.addEventListener("click", () => {
+  if (!isGM()) return;
   sendMessage({ type: "startExploration" });
 });
 
 startCombatBtn?.addEventListener("click", () => {
+  if (!isGM()) return;
   sendMessage({ type: "startCombat" });
 });
 
@@ -1455,6 +1481,27 @@ async function sendMessage(msg) {
 
         const { data: room, error: er } = await sbClient.from("rooms").select("*").eq("id", roomId).single();
         if (er) throw er;
+
+        // ===== Enforce roles: register membership + prevent multiple GMs =====
+        const userId = String(localStorage.getItem("dnd_user_id") || myId || "");
+        const role = String(localStorage.getItem("dnd_user_role") || myRole || "");
+        const uname = String(localStorage.getItem("dnd_user_name") || "");
+        if (userId && role) {
+          const { error: mErr } = await sbClient.from("room_members").upsert({
+            room_id: roomId,
+            user_id: userId,
+            name: uname || String(myNameSpan?.textContent || "").replace(/^\s*Вы:\s*/i, "") || "Player",
+            role: role
+          });
+          if (mErr) {
+            // Unique violation (second GM) => Postgres code 23505
+            if (role === "GM" && (mErr.code === "23505" || String(mErr.message || "").includes("uq_one_gm_per_room"))) {
+              handleMessage({ type: "roomsError", message: "GM уже в комнате" });
+              return;
+            }
+            throw mErr;
+          }
+        }
 
         currentRoomId = roomId;
         handleMessage({ type: "joinedRoom", room });
