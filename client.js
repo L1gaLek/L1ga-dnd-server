@@ -237,6 +237,9 @@ let finishInitiativeSent = false;
 
 // users map (ownerId -> {name, role})
 const usersById = new Map();
+// стабильный порядок присоединения пользователей в комнате
+const userJoinOrder = new Map();
+let userJoinSeq = 0;
 
 // стартово прячем панель бросков до входа в комнату
 if (diceViz) diceViz.style.display = 'none';
@@ -356,15 +359,35 @@ loginDiv.style.display = 'none';
 
     if (msg.type === "users" && Array.isArray(msg.users)) {
       usersById.clear();
-      msg.users.forEach(u => usersById.set(u.id, { name: u.name, role: u.role }));
+      msg.users.forEach(u => {
+        usersById.set(u.id, { name: u.name, role: u.role });
+        // фиксируем порядок появления пользователя в комнате
+        if (u && u.id && !userJoinOrder.has(u.id)) userJoinOrder.set(u.id, ++userJoinSeq);
+      });
       updatePlayerList();
     }
 
     if (msg.type === "diceEvent" && msg.event) {
+      // ✅ Все видят действие в "Журнале действий"
+      try {
+        const line = formatDiceEventLine(msg.event);
+        if (line) {
+          pushEphemeralLog(line);
+          if (typeof lastState === "object" && lastState) {
+            renderLog(getMergedLog(lastState.log || []));
+          } else {
+            renderLog(getMergedLog([]));
+          }
+        }
+      } catch {}
+
       // показываем всем "Броски других", а себе — обновляем основную панель броска
       if (msg.event.fromId && typeof myId !== "undefined" && msg.event.fromId === myId) {
         applyDiceEventToMain(msg.event);
       } else {
+        pushOtherDiceEvent(msg.event);
+      }
+    } else {
         pushOtherDiceEvent(msg.event);
       }
     }
@@ -417,12 +440,11 @@ loginDiv.style.display = 'none';
       updatePhaseUI(msg.state);
       updatePlayerList();
       updateCurrentPlayer(msg.state);
-      renderLog(msg.state.log || []);
+      renderLog(getMergedLog(msg.state.log || []));
 
       // если "Инфа" открыта — обновляем ее по свежему state
       window.InfoModal?.refresh?.(players);
     }
-}
 
 /*
 startInitiativeBtn?.addEventListener("click", () => {
@@ -487,6 +509,34 @@ function setupRoleUI(role) {
 
 //
 // ================== LOG ==================
+// ===== Local (ephemeral) log lines (например, diceEvent).
+// Не сохраняются на сервере, но будут отображаться у всех клиентов, кто получил diceEvent.
+const ephemeralLog = [];
+function pushEphemeralLog(line) {
+  const t = String(line || "").trim();
+  if (!t) return;
+  ephemeralLog.push(t);
+  if (ephemeralLog.length > 60) ephemeralLog.splice(0, ephemeralLog.length - 60);
+}
+function getMergedLog(serverLog) {
+  const base = Array.isArray(serverLog) ? serverLog : [];
+  return base.concat(ephemeralLog);
+}
+function formatDiceEventLine(ev) {
+  if (!ev || typeof ev !== "object") return "";
+  const name = String(ev.fromName || "Кто-то");
+  const kind = String(ev.kindText || "Бросок");
+  const rolls = Array.isArray(ev.rolls) ? ev.rolls : [];
+  const bonus = Number(ev.bonus) || 0;
+  const total = (ev.total !== undefined && ev.total !== null) ? Number(ev.total) : null;
+  const parts = [];
+  if (rolls.length) parts.push(`[${rolls.join(", ")}]`);
+  if (bonus) parts.push(`${bonus >= 0 ? "+" : ""}${bonus}`);
+  if (total !== null && Number.isFinite(total)) parts.push(`= ${total}`);
+  const trail = parts.length ? ` ${parts.join(" ")}` : "";
+  return `🎲 ${name}: ${kind}${trail}`;
+}
+
 function renderLog(logs) {
   const wasNearBottom =
     (logList.scrollTop + logList.clientHeight) >= (logList.scrollHeight - 30);
@@ -586,7 +636,22 @@ function updatePlayerList() {
     grouped[p.ownerId].players.push(p);
   });
 
-  Object.entries(grouped).forEach(([ownerId, group]) => {
+  const ownerIds = Object.keys(grouped);
+  ownerIds.sort((a, b) => {
+    const ua = usersById.get(a);
+    const ub = usersById.get(b);
+    const ra = (ua && ua.role) ? String(ua.role) : "";
+    const rb = (ub && ub.role) ? String(ub.role) : "";
+    const wa = (ra === "GM") ? 0 : 1;
+    const wb = (rb === "GM") ? 0 : 1;
+    if (wa !== wb) return wa - wb;
+    const oa = userJoinOrder.get(a) || 999999;
+    const ob = userJoinOrder.get(b) || 999999;
+    return oa - ob;
+  });
+
+  ownerIds.forEach((ownerId) => {
+    const group = grouped[ownerId];
     const userInfo = ownerId ? usersById.get(ownerId) : null;
 
     const ownerLi = document.createElement('li');
@@ -598,6 +663,7 @@ function updatePlayerList() {
     const ownerNameSpan = document.createElement('span');
     ownerNameSpan.className = 'owner-name';
     ownerNameSpan.textContent = userInfo?.name || group.ownerName;
+    ownerNameSpan.title = ownerNameSpan.textContent;
 
     const role = userInfo?.role;
     const badge = document.createElement('span');
@@ -616,6 +682,7 @@ function updatePlayerList() {
       const text = document.createElement('span');
       text.classList.add('player-name-text');
       text.textContent = 'Персонажей нет';
+      text.title = 'Персонажей нет';
       emptyLi.appendChild(text);
       ul.appendChild(emptyLi);
     }
@@ -637,6 +704,7 @@ function updatePlayerList() {
       text.classList.add('player-name-text');
       const initVal = (p.initiative !== null && p.initiative !== undefined) ? p.initiative : 0;
       text.textContent = `${p.name} (${initVal})`;
+      text.title = p.name;
 
       const nameWrap = document.createElement('div');
       nameWrap.classList.add('player-name-wrap');
