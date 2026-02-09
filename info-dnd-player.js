@@ -623,6 +623,14 @@ function openLanguagesPopup(player) {
   if (!player?.sheet?.parsed) return;
   if (!canEditPlayer(player)) return;
 
+  // Важно: после refresh(players) объект player может стать устаревшей ссылкой.
+  // Из-за этого при добавлении языка UI мог «прыгать»: языки пропадают/появляются
+  // после повторного захода во вкладку. Поэтому всегда работаем с актуальным
+  // объектом открытого персонажа из последнего snapshot.
+  const getLivePlayer = () => {
+    try { return getOpenedPlayerSafe() || player; } catch { return player; }
+  };
+
   const renderCol = (title, items, category) => {
     const rows = items.map(l => `
       <div class="lss-lang-row" data-lang-id="${escapeHtml(l.id)}">
@@ -668,7 +676,9 @@ function openLanguagesPopup(player) {
     const found = all.find(x => x.id === id);
     if (!found) return;
 
-    const sheet = player.sheet.parsed;
+    const live = getLivePlayer();
+    if (!live?.sheet?.parsed) return;
+    const sheet = live.sheet.parsed;
     if (!sheet.info || typeof sheet.info !== "object") sheet.info = {};
     if (!Array.isArray(sheet.info.languagesLearned)) sheet.info.languagesLearned = [];
 
@@ -686,10 +696,10 @@ function openLanguagesPopup(player) {
       });
     }
 
-    markModalInteracted(player.id);
-    scheduleSheetSave(player);
+    markModalInteracted(live.id);
+    scheduleSheetSave(live);
     close();
-    renderSheetModal(player, { force: true });
+    renderSheetModal(live, { force: true });
   });
 }
 
@@ -698,6 +708,11 @@ function bindLanguagesUi(root, player, canEdit) {
   if (root.__langWired) return;
   root.__langWired = true;
 
+  // см. комментарий в openLanguagesPopup — всегда берём актуальную ссылку
+  const getLivePlayer = () => {
+    try { return getOpenedPlayerSafe() || player; } catch { return player; }
+  };
+
   // Делегирование: кнопка открытия попапа + удаление выученного языка
   root.addEventListener("click", (e) => {
     const openBtn = e.target?.closest?.("[data-lang-popup-open]");
@@ -705,7 +720,7 @@ function bindLanguagesUi(root, player, canEdit) {
       e.preventDefault();
       e.stopPropagation();
       if (!canEdit) return;
-      openLanguagesPopup(player);
+      openLanguagesPopup(getLivePlayer());
       return;
     }
 
@@ -716,7 +731,8 @@ function bindLanguagesUi(root, player, canEdit) {
       if (!canEdit) return;
       const id = String(rm.getAttribute("data-lang-remove-id") || "").trim();
       if (!id) return;
-      const sheet = player?.sheet?.parsed;
+      const live = getLivePlayer();
+      const sheet = live?.sheet?.parsed;
       if (!sheet?.info || typeof sheet.info !== "object") return;
       if (!Array.isArray(sheet.info.languagesLearned)) return;
 
@@ -725,9 +741,9 @@ function bindLanguagesUi(root, player, canEdit) {
         return xid !== id;
       });
 
-      markModalInteracted(player.id);
-      scheduleSheetSave(player);
-      renderSheetModal(player, { force: true });
+      markModalInteracted(live.id);
+      scheduleSheetSave(live);
+      renderSheetModal(live, { force: true });
     }
   });
 }
@@ -1812,6 +1828,17 @@ function calcWeaponAttackBonus(sheet, weapon) {
   return statMod + prof + extra;
 }
 
+function calcWeaponDamageBonus(sheet, weapon) {
+  if (!sheet || !weapon) return 0;
+  const ability = String(weapon.ability || "str");
+  // В sheet.stats[ability] в наших json обычно есть modifier, но на всякий случай
+  // вычислим из value, если modifier отсутствует.
+  const direct = sheet?.stats?.[ability]?.modifier;
+  if (direct !== undefined && direct !== null && direct !== "") return safeInt(direct, 0);
+  const score = safeInt(sheet?.stats?.[ability]?.value, 10);
+  return Math.floor((score - 10) / 2);
+}
+
 function weaponDamageText(weapon) {
   const n = Math.max(0, safeInt(weapon?.dmgNum, 1));
   const dice = String(weapon?.dmgDice || "к6");
@@ -2019,8 +2046,15 @@ function bindCombatEditors(root, player, canEdit) {
         const n = Math.max(0, safeInt(w?.dmgNum, 1));
         const diceStr = String(w?.dmgDice || "к6").trim().toLowerCase(); // "к8"
         const sides = safeInt(diceStr.replace("к", ""), 6);
+        const bonus = calcWeaponDamageBonus(sheet, w);
         if (window.DicePanel?.roll) {
-          window.DicePanel.roll({ sides, count: Math.max(1, n), bonus: 0, kindText: `Урон: d${sides} × ${Math.max(1,n)}` });
+          const cnt = Math.max(1, n);
+          window.DicePanel.roll({
+            sides,
+            count: cnt,
+            bonus,
+            kindText: `Урон: ${cnt}d${sides} ${formatMod(bonus)}`
+          });
         }
       });
     }
