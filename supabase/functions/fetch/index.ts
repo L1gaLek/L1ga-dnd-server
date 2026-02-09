@@ -59,3 +59,39 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+// supabase/functions/cleanup-rooms/index.ts
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+Deno.serve(async (req) => {
+  // простая защита, чтобы никто снаружи не мог дергать функцию
+  const secret = Deno.env.get("CRON_SECRET") ?? "";
+  const got = req.headers.get("x-cron-secret") ?? "";
+  if (!secret || got !== secret) {
+    return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const supabase = createClient(url, serviceKey, {
+    auth: { persistSession: false },
+  });
+
+  // ВАЖНО: cleanup_rooms() должна быть RETURNS void (как мы делали)
+  const { error } = await supabase.rpc("cleanup_rooms");
+  if (error) {
+    return new Response(JSON.stringify({ ok: false, error }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+});
