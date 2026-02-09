@@ -1572,7 +1572,7 @@ async function sendMessage(msg) {
           const { error: mErr } = await sbClient.from("room_members").upsert({
             room_id: roomId,
             user_id: userId,
-            name: safeGetUserName(),
+            name: safeGetUserName,
             role: normalizeRoleForDb(role),
             last_seen: new Date().toISOString()
                     });
