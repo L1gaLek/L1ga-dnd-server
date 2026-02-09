@@ -76,7 +76,7 @@ let myId;
 let myRole;
 
 // ===== Role helpers (MVP) =====
-function isGM() { return String(normalizeRole(myRole) || '') === 'GM'; }
+function isGM() { return String(myRole || '') === 'GM'; }
 function applyRoleToUI() {
   const gm = isGM();
   const rightPanel = document.getElementById('right-panel');
@@ -169,10 +169,6 @@ if (msg.type === 'joinedRoom' && msg.room) {
   if (myRoomSpan) myRoomSpan.textContent = msg.room.name || '-';
   if (myScenarioSpan) myScenarioSpan.textContent = msg.room.scenario || '-';
   if (diceViz) diceViz.style.display = 'block';
-
-
-  // обновляем видимость GM-панелей по роли
-  applyRoleToUI();
 }
 
 if (msg.type === "registered") {
@@ -197,7 +193,7 @@ loginDiv.style.display = 'none';
       sendMessage({ type: 'listRooms' });
 
       setupRoleUI(myRole);
-  applyRoleToUI();
+
       // ИНИЦИАЛИЗАЦИЯ МОДАЛКИ "ИНФА"
       if (window.InfoModal?.init) {
         window.InfoModal.init({
@@ -310,7 +306,6 @@ nextTurnBtn?.addEventListener("click", () => {
 
 // ================== ROLE UI ==================
 function setupRoleUI(role) {
-  // Жёсткое ограничение только для наблюдателя. Все GM-панели скрываются/показываются в applyRoleToUI().
   if (role === "Spectator") {
     addPlayerBtn.style.display = 'none';
     rollBtn.style.display = 'none';
@@ -322,9 +317,17 @@ function setupRoleUI(role) {
     if (worldPhasesBox) worldPhasesBox.style.display = 'none';
     if (envEditorBox) envEditorBox.style.display = 'none';
     if (nextTurnBtn) nextTurnBtn.style.display = 'none';
+  } else if (role === "DnD-Player") {
+    resetGameBtn.style.display = 'none';
+    if (worldPhasesBox) worldPhasesBox.style.display = 'none';
+    if (envEditorBox) envEditorBox.style.display = 'none';
+  }
+
+  if (role === "GM") {
+    if (worldPhasesBox) worldPhasesBox.style.display = '';
+    if (envEditorBox) envEditorBox.style.display = '';
   }
 }
-
 
 // ================== LOG ==================
 function renderLog(logs) {
@@ -383,9 +386,8 @@ function highlightCurrentTurn(playerId) {
 
 // ================== PLAYER LIST ==================
 function normalizeRole(role) {
-  if (!role) return "-";
-  // старое значение из index.html
-  if (role === "Player") return "DnD-Player";
+  if (!role) return \"-\";
+  if (role === \"Player\") return \"DnD-Player\";
   return String(role);
 }
 
@@ -1488,15 +1490,15 @@ async function sendMessage(msg) {
 
         // ===== Enforce roles: register membership + prevent multiple GMs =====
         const userId = String(localStorage.getItem("dnd_user_id") || myId || "");
-        const role = String(localStorage.getItem("dnd_user_role") || myRole || "");
-        const roleForDb = (role === "DnD-Player") ? "Player" : role;
+        const roleRaw = String(localStorage.getItem("dnd_user_role") || myRole || "");
+        const role = roleRaw === "DnD-Player" ? "Player" : roleRaw; // DB expects Player
         const uname = String(localStorage.getItem("dnd_user_name") || "");
-        if (userId && role) {
+if (userId && role) {
           const { error: mErr } = await sbClient.from("room_members").upsert({
             room_id: roomId,
             user_id: userId,
             name: uname || String(myNameSpan?.textContent || "").replace(/^\s*Вы:\s*/i, "") || "Player",
-            role: roleForDb
+            role: role
           });
           if (mErr) {
             // Unique violation (second GM) => Postgres code 23505
