@@ -1468,6 +1468,7 @@ clearBoardBtn.addEventListener('click', () => {
   sendMessage({ type: 'clearBoard' });
 });
 
+/*
 // ================== HELPER ==================
 */
 
