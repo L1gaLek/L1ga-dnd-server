@@ -107,9 +107,11 @@ function safeGetUserRoleDb() {
 }
 
 function isGM() { return String(myRole || '') === 'GM'; }
+function isSpectator() { return String(myRole || '') === 'Spectator'; }
 
 function applyRoleToUI() {
   const gm = isGM();
+  const spectator = isSpectator();
 
   // ГМ-панель справа (Фазы мира + Редактирование окружения)
   const rightPanel = document.getElementById('right-panel');
@@ -123,9 +125,9 @@ function applyRoleToUI() {
     envEditorBox.style.display = gm ? '' : 'none';
   }
 
-  // Блок "Добавление игрока" слева (только ГМ)
+  // "Управление игроками" используется всеми, кроме зрителей
   const pm = document.getElementById('player-management');
-  if (pm) pm.style.display = gm ? '' : 'none';
+  if (pm) pm.style.display = spectator ? 'none' : '';
 
 
   // Disable GM-only buttons defensively
@@ -142,6 +144,7 @@ function applyRoleToUI() {
 let currentRoomId = null;
 
 let heartbeatTimer = null;
+let membersPollTimer = null;
 
 function startHeartbeat() {
   stopHeartbeat();
@@ -149,6 +152,23 @@ function startHeartbeat() {
 
   updateLastSeen();
   heartbeatTimer = setInterval(updateLastSeen, 60_000); // раз в минуту
+}
+
+function startMembersPolling() {
+  stopMembersPolling();
+  if (!sbClient || !currentRoomId) return;
+  // страховка на случай, если realtime-уведомления временно не приходят
+  membersPollTimer = setInterval(() => {
+    if (!currentRoomId) return;
+    refreshRoomMembers(currentRoomId);
+  }, 5000);
+}
+
+function stopMembersPolling() {
+  if (membersPollTimer) {
+    clearInterval(membersPollTimer);
+    membersPollTimer = null;
+  }
 }
 
 function stopHeartbeat() {
@@ -194,6 +214,7 @@ async function updateLastSeen() {
 // Останавливаем heartbeat при закрытии вкладки (но это не "выход из комнаты" — просто прекращаем пинг)
 window.addEventListener("beforeunload", () => {
   stopHeartbeat();
+  stopMembersPolling();
 });
 
 let players = [];
@@ -269,6 +290,8 @@ if (msg.type === 'joinedRoom' && msg.room) {
   if (myScenarioSpan) myScenarioSpan.textContent = msg.room.scenario || '-';
   if (diceViz) diceViz.style.display = 'block';
   applyRoleToUI();
+  startHeartbeat();
+  startMembersPolling();
 }
 
 if (msg.type === "registered") {
@@ -284,6 +307,8 @@ myRole = msg.role;
       
 
       currentRoomId = null;
+      stopHeartbeat();
+      stopMembersPolling();
       if (diceViz) diceViz.style.display = 'none';
       if (myRoomSpan) myRoomSpan.textContent = '-';
       if (myScenarioSpan) myScenarioSpan.textContent = '-';
@@ -316,6 +341,12 @@ loginDiv.style.display = 'none';
         // в игре — показываем как быстрое уведомление
         alert(text);
       }
+    }
+
+    // Сообщения лобби (например, "GM уже в комнате")
+    if (msg.type === "roomsError") {
+      const text = String(msg.message || "Ошибка");
+      if (roomsError) roomsError.textContent = text;
     }
 
     if (msg.type === "users" && Array.isArray(msg.users)) {
@@ -1644,7 +1675,26 @@ async function sendMessage(msg) {
         // ===== Enforce roles: register membership + prevent multiple GMs =====
         const userId = String(localStorage.getItem("dnd_user_id") || myId || "");
         const role = String(localStorage.getItem("dnd_user_role") || myRole || "");
-        const uname = String(localStorage.getItem("dnd_user_name") || "");
+
+        // ✅ Мягкая проверка до upsert (чтобы сразу показать текстовое предупреждение)
+        if (role === "GM" && userId) {
+          const { data: existingGm, error: gmErr } = await sbClient
+            .from("room_members")
+            .select("user_id")
+            .eq("room_id", roomId)
+            .eq("role", "GM")
+            .limit(1);
+          if (!gmErr && Array.isArray(existingGm) && existingGm.length) {
+            const gmId = String(existingGm[0]?.user_id || "");
+            if (gmId && gmId !== userId) {
+              handleMessage({
+                type: "roomsError",
+                message: "В этой комнате уже присутствует GM. Вы не можете зайти как GM."
+              });
+              return;
+            }
+          }
+        }
         if (userId && role) {
           const { error: mErr } = await sbClient.from("room_members").upsert({
             room_id: roomId,
