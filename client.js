@@ -76,7 +76,7 @@ let myId;
 let myRole;
 
 // ===== Role helpers (MVP) =====
-function isGM() { return String(myRole || '') === 'GM'; }
+function isGM() { return String(normalizeRole(myRole) || '') === 'GM'; }
 function applyRoleToUI() {
   const gm = isGM();
   const rightPanel = document.getElementById('right-panel');
@@ -169,6 +169,10 @@ if (msg.type === 'joinedRoom' && msg.room) {
   if (myRoomSpan) myRoomSpan.textContent = msg.room.name || '-';
   if (myScenarioSpan) myScenarioSpan.textContent = msg.room.scenario || '-';
   if (diceViz) diceViz.style.display = 'block';
+
+
+  // обновляем видимость GM-панелей по роли
+  applyRoleToUI();
 }
 
 if (msg.type === "registered") {
@@ -193,7 +197,7 @@ loginDiv.style.display = 'none';
       sendMessage({ type: 'listRooms' });
 
       setupRoleUI(myRole);
-
+  applyRoleToUI();
       // ИНИЦИАЛИЗАЦИЯ МОДАЛКИ "ИНФА"
       if (window.InfoModal?.init) {
         window.InfoModal.init({
@@ -306,6 +310,7 @@ nextTurnBtn?.addEventListener("click", () => {
 
 // ================== ROLE UI ==================
 function setupRoleUI(role) {
+  // Жёсткое ограничение только для наблюдателя. Все GM-панели скрываются/показываются в applyRoleToUI().
   if (role === "Spectator") {
     addPlayerBtn.style.display = 'none';
     rollBtn.style.display = 'none';
@@ -317,17 +322,9 @@ function setupRoleUI(role) {
     if (worldPhasesBox) worldPhasesBox.style.display = 'none';
     if (envEditorBox) envEditorBox.style.display = 'none';
     if (nextTurnBtn) nextTurnBtn.style.display = 'none';
-  } else if (role === "DnD-Player") {
-    resetGameBtn.style.display = 'none';
-    if (worldPhasesBox) worldPhasesBox.style.display = 'none';
-    if (envEditorBox) envEditorBox.style.display = 'none';
-  }
-
-  if (role === "GM") {
-    if (worldPhasesBox) worldPhasesBox.style.display = '';
-    if (envEditorBox) envEditorBox.style.display = '';
   }
 }
+
 
 // ================== LOG ==================
 function renderLog(logs) {
@@ -385,9 +382,16 @@ function highlightCurrentTurn(playerId) {
 }
 
 // ================== PLAYER LIST ==================
+function normalizeRole(role) {
+  if (!role) return \"-\";
+  // старое значение из index.html
+  if (role === \"Player\") return \"DnD-Player\";
+  return String(role);
+}
+
 function roleToLabel(role) {
   if (role === "GM") return "GM";
-  if (role === "DnD-Player") return "DND-P";
+  if (role === "DnD-Player" || role === "Player") return "DND-P";
   if (role === "Spectator") return "Spectr";
   return role || "-";
 }
@@ -439,7 +443,7 @@ function updatePlayerList() {
     ownerNameSpan.className = 'owner-name';
     ownerNameSpan.textContent = userInfo?.name || group.ownerName;
 
-    const role = userInfo?.role;
+    const role = normalizeRole(userInfo?.role);
     const badge = document.createElement('span');
     badge.className = `role-badge ${roleToClass(role)}`;
     badge.textContent = `(${roleToLabel(role)})`;
