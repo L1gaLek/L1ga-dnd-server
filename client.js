@@ -1391,34 +1391,90 @@ editEnvBtn.addEventListener('click', () => {
 addWallBtn.addEventListener('click', () => wallMode = 'add');
 removeWallBtn.addEventListener('click', () => wallMode = 'remove');
 
-board.addEventListener('mousedown', e => {
+// Чтобы "стена строилась за мышкой" без мигания/пропусков — батчим изменения и отправляем 1 сообщением по отпусканию.
+let wallDragVisited = new Set(); // "x,y"
+let wallDragCells = [];
+let wallPointerId = null;
+
+function wallKey(x, y) { return `${x},${y}`; }
+
+function pickCellFromPointer(e) {
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  return el ? el.closest?.('.cell') : null;
+}
+
+function applyWallLocal(cell) {
+  if (!cell) return;
+  const x = +cell.dataset.x, y = +cell.dataset.y;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+  const key = wallKey(x, y);
+  if (wallDragVisited.has(key)) return;
+  wallDragVisited.add(key);
+  wallDragCells.push({ x, y });
+
+  // мгновенный UI-отклик
+  if (wallMode === 'add') cell.classList.add('wall');
+  else if (wallMode === 'remove') cell.classList.remove('wall');
+
+  // оптимистично обновим lastState, чтобы перерисовка не "откатывала" клетки
+  if (lastState) {
+    if (!Array.isArray(lastState.walls)) lastState.walls = [];
+    const idx = lastState.walls.findIndex(w => w && w.x === x && w.y === y);
+    if (wallMode === 'add') {
+      if (idx === -1) lastState.walls.push({ x, y });
+    } else if (wallMode === 'remove') {
+      if (idx !== -1) lastState.walls.splice(idx, 1);
+    }
+  }
+}
+
+function flushWallBatch() {
+  if (!wallDragCells.length) return;
+  // 1 запрос в базу вместо сотен — исчезают "мигания" и пропуски
+  sendMessage({ type: 'bulkWalls', mode: wallMode, cells: wallDragCells });
+  wallDragCells = [];
+  wallDragVisited = new Set();
+}
+
+board.addEventListener('pointerdown', (e) => {
   if (!editEnvironment || !wallMode) return;
   const cell = e.target.closest('.cell');
   if (!cell) return;
+
   mouseDown = true;
-  toggleWall(cell);
+  wallPointerId = e.pointerId;
+
+  wallDragVisited = new Set();
+  wallDragCells = [];
+
+  try { board.setPointerCapture?.(e.pointerId); } catch {}
+  applyWallLocal(cell);
 });
 
-board.addEventListener('mouseover', e => {
+board.addEventListener('pointermove', (e) => {
   if (!mouseDown || !editEnvironment || !wallMode) return;
-  const cell = e.target.closest('.cell');
-  if (!cell) return;
-  toggleWall(cell);
+  if (wallPointerId != null && e.pointerId !== wallPointerId) return;
+
+  const cell = pickCellFromPointer(e);
+  applyWallLocal(cell);
 });
 
-board.addEventListener('mouseup', () => { mouseDown = false; });
+function stopWallDrag(e) {
+  if (!mouseDown) return;
+  if (wallPointerId != null && e && e.pointerId != null && e.pointerId !== wallPointerId) return;
 
-function toggleWall(cell) {
-  if (!cell) return;
-  const x = +cell.dataset.x, y = +cell.dataset.y;
-  if (wallMode === 'add') {
-    sendMessage({ type: 'addWall', wall: { x, y } });
-    cell.classList.add('wall');
-  } else if (wallMode === 'remove') {
-    sendMessage({ type: 'removeWall', wall: { x, y } });
-    cell.classList.remove('wall');
-  }
+  mouseDown = false;
+  try { if (wallPointerId != null) board.releasePointerCapture?.(wallPointerId); } catch {}
+  wallPointerId = null;
+
+  flushWallBatch();
 }
+
+board.addEventListener('pointerup', stopWallDrag);
+board.addEventListener('pointercancel', stopWallDrag);
+// страховка: если отпустили кнопку вне поля
+window.addEventListener('pointerup', stopWallDrag);
 
 // ================== CREATE BOARD ==================
 createBoardBtn.addEventListener('click', () => {
@@ -1736,16 +1792,24 @@ async function sendMessage(msg) {
 
       // ===== Dice live events =====
       case "diceEvent": {
-        if (!currentRoomId || !roomChannel) return;
-        await roomChannel.send({
-          type: "broadcast",
-          event: "diceEvent",
-          payload: { event: msg.event }
-        });
-        // also apply to self instantly
-        if (msg.event) handleMessage({ type: "diceEvent", event: msg.event });
-        break;
-      }
+  if (!currentRoomId || !roomChannel) return;
+
+  const fromId = String(localStorage.getItem("dnd_user_id") || myId || "");
+  const fromName = String(localStorage.getItem("dnd_user_name") || myNameSpan?.textContent || "Player");
+  const event = Object.assign({}, msg.event || {});
+  if (!event.fromId) event.fromId = fromId;
+  if (!event.fromName) event.fromName = fromName;
+
+  await roomChannel.send({
+    type: "broadcast",
+    event: "diceEvent",
+    payload: { event }
+  });
+
+  // also apply to self instantly
+  handleMessage({ type: "diceEvent", event });
+  break;
+}
 
       // ===== Saved bases (characters) =====
       case "listSavedBases": {
@@ -1976,7 +2040,38 @@ async function sendMessage(msg) {
           logEventToState(next, `Игрок ${p.name} полностью удален`);
         }
 
-        else if (type === "addWall") {
+        else if (type === "bulkWalls") {
+  if (!isGM) return;
+  const mode = (msg.mode === "remove") ? "remove" : "add";
+  const cells = Array.isArray(msg.cells) ? msg.cells : [];
+  if (!Array.isArray(next.walls)) next.walls = [];
+
+  let changed = 0;
+  for (const c of cells) {
+    if (!c) continue;
+    const x = Number(c.x), y = Number(c.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+    const idx = next.walls.findIndex(w => w && w.x === x && w.y === y);
+    if (mode === "add") {
+      if (idx === -1) {
+        next.walls.push({ x, y });
+        changed++;
+      }
+    } else {
+      if (idx !== -1) {
+        next.walls.splice(idx, 1);
+        changed++;
+      }
+    }
+  }
+
+  if (changed > 0) {
+    logEventToState(next, `Стены: ${mode === "add" ? "добавлено" : "удалено"} ${changed}`);
+  }
+}
+
+else if (type === "addWall") {
           if (!isGM) return;
           const w = msg.wall;
           if (!w) return;
@@ -2073,7 +2168,14 @@ async function sendMessage(msg) {
           logEventToState(next, `Ход игрока ${np?.name || '-'}`);
         }
 
-        else if (type === "resetGame") {
+        else if (type === "log") {
+  // текстовые события (для "Журнала действий"), должны видеть все
+  const t = (msg && typeof msg.text === "string") ? msg.text : "";
+  if (!t.trim()) return;
+  logEventToState(next, t.trim());
+}
+
+else if (type === "resetGame") {
           if (!isGM) return;
           next.players = [];
           next.walls = [];
