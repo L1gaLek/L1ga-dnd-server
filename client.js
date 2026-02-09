@@ -72,6 +72,7 @@ const envEditorBox = document.getElementById('env-editor');
 let sbClient;
 let roomChannel;    // broadcast/presence channel (optional)
 let roomDbChannel;  // postgres_changes channel
+let roomMembersChannel; // postgres_changes for room_members
 let myId;
 let myRole;
 
@@ -1410,6 +1411,23 @@ async function upsertRoomState(roomId, nextState) {
   if (error) throw error;
 }
 
+
+async function refreshRoomMembers(roomId) {
+  await ensureSupabaseReady();
+  if (!roomId) return;
+  const { data, error } = await sbClient
+    .from("room_members")
+    .select("user_id,name,role")
+    .eq("room_id", roomId);
+  if (error) throw error;
+  const users = (data || []).map(r => ({
+    id: r.user_id,
+    name: r.name,
+    role: normalizeRole(r.role) // для UI: Player -> DnD-Player
+  }));
+  handleMessage({ type: "users", users });
+}
+
 async function subscribeRoomDb(roomId) {
   await ensureSupabaseReady();
   if (roomDbChannel) {
@@ -1441,6 +1459,26 @@ async function subscribeRoomDb(roomId) {
       if (payload && payload.event) handleMessage({ type: "diceEvent", event: payload.event });
     });
   await roomChannel.subscribe();
+
+  // Users/roles in room
+  if (roomMembersChannel) {
+    try { await roomMembersChannel.unsubscribe(); } catch {}
+    roomMembersChannel = null;
+  }
+  roomMembersChannel = sbClient
+    .channel(`db-room_members-${roomId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "room_members", filter: `room_id=eq.${roomId}` },
+      () => {
+        // refresh users list on any join/leave/role change
+        refreshRoomMembers(roomId).catch(() => {});
+      }
+    );
+  await roomMembersChannel.subscribe();
+
+  // initial load
+  refreshRoomMembers(roomId).catch(() => {});
 }
 
 async function sendMessage(msg) {
@@ -1523,12 +1561,39 @@ if (userId && role) {
         }
 
         await subscribeRoomDb(roomId);
-        handleMessage({ type: "state", state: rs.state });
+        
+        await refreshRoomMembers(roomId);
+handleMessage({ type: "state", state: rs.state });
         break;
       }
 
       // ===== Dice live events =====
-      case "diceEvent": {
+      
+case "setPlayerSheet": {
+  if (!currentRoomId) throw new Error("Не выбрана комната");
+  const pid = msg.id;
+  const sheet = msg.sheet;
+
+  if (!pid || !sheet) return;
+
+  // обновляем sheet в локальном state и сохраняем в room_state,
+  // чтобы остальные игроки получили обновление через postgres_changes.
+  const cur = lastState || (await getRoomState(currentRoomId));
+  if (!cur || !Array.isArray(cur.players)) return;
+
+  const next = structuredClone(cur);
+  const p = next.players.find(x => x && x.id === pid);
+  if (!p) return;
+
+  p.sheet = sheet;
+
+  await updateRoomState(currentRoomId, next);
+  // локально тоже обновим, чтобы UI не ждало round-trip
+  handleMessage({ type: "state", state: next });
+  break;
+}
+
+case "diceEvent": {
         if (!currentRoomId || !roomChannel) return;
         await roomChannel.send({
           type: "broadcast",
