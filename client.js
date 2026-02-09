@@ -74,43 +74,8 @@ let roomChannel;    // broadcast/presence channel (optional)
 let roomDbChannel;  // postgres_changes channel
 let myId;
 let myRole;
-let heartbeatTimer = null;
 
 // ===== Role helpers (MVP) =====
-function startHeartbeat() {
-  stopHeartbeat();
-
-  if (!sbClient || !currentRoomId || !myId) return;
-
-  // сразу помечаем, что пользователь активен
-  updateLastSeen();
-
-  heartbeatTimer = setInterval(updateLastSeen, 60_000); // раз в минуту
-}
-
-function stopHeartbeat() {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
-}
-
-async function updateLastSeen() {
-  try {
-await sbClient
-  .from("room_members")
-  .upsert({
-    room_id: currentRoomId,
-    user_id: myId,
-    name: myName,
-    role: myRole,
-    last_seen: new Date().toISOString()
-  });
-  } catch (e) {
-    // не критично — просто молча игнорируем
-  }
-}
-
 function normalizeRoleForDb(role) {
   const r = String(role || '');
   if (r === 'DnD-Player') return 'Player'; // DB constraint
@@ -228,12 +193,7 @@ if (msg.type === 'joinedRoom' && msg.room) {
   if (myScenarioSpan) myScenarioSpan.textContent = msg.room.scenario || '-';
   if (diceViz) diceViz.style.display = 'block';
   applyRoleToUI();
-  startHeartbeat();
 }
-
-  window.addEventListener("beforeunload", () => {
-  stopHeartbeat();
-});
 
 if (msg.type === "registered") {
       myId = msg.id;
@@ -1612,9 +1572,10 @@ async function sendMessage(msg) {
           const { error: mErr } = await sbClient.from("room_members").upsert({
             room_id: roomId,
             user_id: userId,
-            name: uname || String(myNameSpan?.textContent || "").replace(/^\s*Вы:\s*/i, "") || "Player",
-            role: normalizeRoleForDb(role)
-          });
+            name: safeGetUserName(), "") || "Player",
+            role: normalizeRoleForDb(role),
+            last_seen: new Date().toISOString()
+                    });
           if (mErr) {
             // Unique violation (second GM) => Postgres code 23505
             if (role === "GM" && (mErr.code === "23505" || String(mErr.message || "").includes("uq_one_gm_per_room"))) {
