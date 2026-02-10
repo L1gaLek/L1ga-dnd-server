@@ -140,10 +140,10 @@
           <div id="board-settings">
             <div class="board-settings-row">
               <label>Ширина поля:
-                <input type="number" id="board-width" value="10" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
+                <input type="number" id="board-width" value="20" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
               </label>
               <label>Высота поля:
-                <input type="number" id="board-height" value="10" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
+                <input type="number" id="board-height" value="20" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
               </label>
               <button id="create-board" type="button" title="Применить размер рамки (только для вас)">Применить вид</button>
             </div>
@@ -158,10 +158,17 @@
               </label>
               <button id="create-board-gm" type="button" title="Изменить реальный размер карты (видно всем)">Применить карту</button>
             </div>
+
+            <div style="margin-top:6px; opacity:.75; font-size:12px;">
+              Подсказка: прокрутка — колёсиком мыши. Масштаб — <b>Ctrl + колёсико</b>.
+            </div>
           </div>
 
           <div id="board-wrapper">
-            <div id="game-board"></div>
+            <div id="game-board">
+              <!-- Подложка под карту (GM может загрузить картинку/.gif) -->
+              <div id="board-bg" aria-hidden="true"></div>
+            </div>
           </div>
 
           <div id="initiative-warning" style="display:none; color: orange; font-weight: bold;">
@@ -185,6 +192,14 @@
             <button id="edit-environment">Редактирование окружения: ВЫКЛ</button>
             <button id="add-wall" disabled>Добавить стену</button>
             <button id="remove-wall" disabled>Удалить стену</button>
+
+            <div class="side-sep"></div>
+            <div class="side-subtitle">Подложка карты (картинка / .gif)</div>
+            <input id="board-bg-file" type="file" accept="image/*,.gif">
+            <button id="board-bg-clear" type="button">Убрать подложку</button>
+
+            <div class="side-hint">Картинка растягивается под размеры поля (ГМ).</div>
+
             <button id="clear-board">Очистить поле</button>
             <button id="reset-game">Сбросить игру полностью</button>
           </div>
@@ -276,4 +291,3 @@
 
 </body>
 </html>
-
