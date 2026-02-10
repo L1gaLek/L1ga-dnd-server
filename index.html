@@ -193,18 +193,23 @@
             <button id="add-wall" disabled>Добавить стену</button>
             <button id="remove-wall" disabled>Удалить стену</button>
 
-            <div class="campaign-maps-box">
-              <div class="campaign-maps-title">Карты кампании</div>
-              <div class="campaign-maps-row">
-                <select id="campaign-maps-select" title="Выбор активной карты"></select>
-                <button id="create-campaign-map" type="button" title="Создать новую карту">Создать карту</button>
-              </div>
-            </div>
-
             <div class="env-bg-controls">
               <div class="env-bg-title">Подложка карты</div>
               <input id="board-bg-file" type="file" accept="image/*,.gif" />
               <button id="board-bg-clear" type="button">Убрать подложку</button>
+            </div>
+
+            <div class="campaign-maps-controls">
+              <div class="campaign-maps-title">Карты кампании</div>
+              <div class="campaign-maps-row">
+                <div class="campaign-active-map" title="Текущая выбранная карта">
+                  Активная: <span id="campaign-active-map-name">—</span>
+                </div>
+                <button id="campaign-params" type="button">Параметры</button>
+              </div>
+              <!-- Старые элементы оставлены для совместимости, но скрыты (управление в окне «Параметры») -->
+              <select id="campaign-maps-select" title="Выбор карты" style="display:none"></select>
+              <button id="create-campaign-map" type="button" style="display:none">Создать карту</button>
             </div>
 
             <button id="clear-board">Очистить поле</button>
@@ -289,7 +294,7 @@
   window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3dHhpc2d4aWtiZGR6cXdwenNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1ODM5ODEsImV4cCI6MjA4NjE1OTk4MX0.gLCl7G-J8WvEVMcfQgzDRe-NCfrzCMLOFZ-51Ph5QRM";
   // Optional: Edge Function URL for CORS proxy (dnd.su spell pages)
   // Example: https://<project-ref>.functions.supabase.co/fetch
-  window.SUPABASE_FETCH_FN = "";
+  window.SUPABASE_FETCH_FN = "PASTE_SUPABASE_FETCH_FN_URL_HERE";
 </script>
 
 <script src="info-dnd-player.js" defer></script>
