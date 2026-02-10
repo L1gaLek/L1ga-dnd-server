@@ -73,8 +73,8 @@ const boardBgFileInput = document.getElementById('board-bg-file');
 const boardBgClearBtn = document.getElementById('board-bg-clear');
 
 // ===== Карты кампании (ГМ) =====
-const campaignParamsBtn = document.getElementById('campaign-params');
 const activeMapNameSpan = document.getElementById('active-map-name');
+
 
 // ================== VARIABLES ==================
 // Supabase replaces our old Node/WebSocket server.
@@ -1565,11 +1565,9 @@ function deepClone(obj) {
 
 function createInitialGameState() {
   const mapId = (crypto?.randomUUID ? crypto.randomUUID() : ("map-" + Math.random().toString(16).slice(2)));
-  const secId = (crypto?.randomUUID ? crypto.randomUUID() : ("sec-" + Math.random().toString(16).slice(2)));
   const base = {
     id: mapId,
     name: "Карта 1",
-    sectionId: secId,
     boardWidth: 10,
     boardHeight: 10,
     boardBgDataUrl: null,
@@ -1581,7 +1579,6 @@ function createInitialGameState() {
 
     // Active map is mirrored into root-level fields for backward compatibility
     currentMapId: mapId,
-    mapSections: [{ id: secId, name: "Раздел 1" }],
     maps: [base],
 
     boardWidth: base.boardWidth,
@@ -1603,34 +1600,14 @@ function ensureStateHasMaps(state) {
   // already new schema
   if (Array.isArray(state.maps) && state.maps.length) {
     if (!state.currentMapId) state.currentMapId = String(state.maps[0].id || "map-1");
-
-    // ===== sections migration (schemaVersion 3) =====
-    if (!Array.isArray(state.mapSections) || state.mapSections.length === 0) {
-      const secId = (crypto?.randomUUID ? crypto.randomUUID() : ("sec-" + Math.random().toString(16).slice(2)));
-      state.mapSections = [{ id: secId, name: "Раздел 1" }];
-      (state.maps || []).forEach(m => {
-        if (m && (m.sectionId === null || typeof m.sectionId === "undefined")) m.sectionId = secId;
-      });
-    } else {
-      const first = state.mapSections[0];
-      (state.maps || []).forEach(m => {
-        if (!m) return;
-        const sid = String(m.sectionId || "");
-        const ok = state.mapSections.some(s => String(s?.id) === sid);
-        if (!ok) m.sectionId = first?.id;
-      });
-    }
-
     return state;
   }
 
   // migrate old schema -> single map
   const mapId = (crypto?.randomUUID ? crypto.randomUUID() : ("map-" + Math.random().toString(16).slice(2)));
-  const secId = (crypto?.randomUUID ? crypto.randomUUID() : ("sec-" + Math.random().toString(16).slice(2)));
   const migratedMap = {
     id: mapId,
     name: "Карта 1",
-    sectionId: secId,
     boardWidth: Number(state.boardWidth) || 10,
     boardHeight: Number(state.boardHeight) || 10,
     boardBgDataUrl: state.boardBgDataUrl || null,
@@ -1646,7 +1623,6 @@ function ensureStateHasMaps(state) {
 
   state.schemaVersion = 2;
   state.currentMapId = mapId;
-  state.mapSections = [{ id: secId, name: "Раздел 1" }];
   state.maps = [migratedMap];
 
   // keep root mirror
@@ -2125,11 +2101,77 @@ async function sendMessage(msg) {
           logEventToState(next, `Создан раздел: ${name}`);
         }
 
+        else if (type === "renameMapSection") {
+          if (!isGM) return;
+          ensureStateHasMaps(next);
+          const sid = String(msg.sectionId || "").trim();
+          const name = String(msg.name || "").trim();
+          if (!sid || !name) return;
+          const sections = Array.isArray(next.mapSections) ? next.mapSections : [];
+          const sec = sections.find(s => String(s?.id) === sid);
+          if (!sec) return;
+          sec.name = name;
+          logEventToState(next, `Раздел переименован: ${name}`);
+        }
+
+        else if (type === "deleteMapSection") {
+          if (!isGM) return;
+          ensureStateHasMaps(next);
+          const sid = String(msg.sectionId || "").trim();
+          const moveTo = (msg.moveToSectionId === null || msg.moveToSectionId === undefined)
+            ? null
+            : String(msg.moveToSectionId || "").trim();
+          if (!sid) return;
+
+          syncActiveToMap(next);
+
+          const sections = Array.isArray(next.mapSections) ? next.mapSections : [];
+          const maps = Array.isArray(next.maps) ? next.maps : [];
+
+          let remainingSections = sections.filter(s => String(s?.id) !== sid);
+          if (!remainingSections.length) {
+            const newSid = (crypto?.randomUUID ? crypto.randomUUID() : ("sec-" + Math.random().toString(16).slice(2)));
+            remainingSections = [{ id: newSid, name: "Раздел 1" }];
+          }
+
+          const targetSid = remainingSections.some(s => String(s?.id) === moveTo) ? moveTo : null;
+
+          // переносим карты либо удаляем
+          let removedMaps = 0;
+          next.maps = maps
+            .map(m => {
+              const msid = String(m?.sectionId || "");
+              if (msid !== sid) return m;
+              if (targetSid) return { ...m, sectionId: targetSid };
+              removedMaps++;
+              return null;
+            })
+            .filter(Boolean);
+
+          next.mapSections = remainingSections;
+
+          // гарантируем, что есть хотя бы одна карта
+          if (!Array.isArray(next.maps) || next.maps.length === 0) {
+            const init = createInitialGameState();
+            next.maps = init.maps;
+            next.mapSections = init.mapSections;
+            next.currentMapId = init.currentMapId;
+            loadMapToRoot(next, next.currentMapId);
+          } else {
+            // если текущая карта была в удаленном разделе и мы удалили карты — переключимся на первую
+            const curId = String(next.currentMapId || "");
+            const stillExists = next.maps.some(m => String(m?.id) === curId);
+            if (!stillExists) loadMapToRoot(next, next.maps[0]?.id);
+          }
+
+          logEventToState(next, targetSid
+            ? `Удален раздел. Карты перенесены (${removedMaps ? 'частично' : 'все'})`
+            : `Удален раздел и удалено карт: ${removedMaps}`);
+        }
+
         else if (type === "createCampaignMap") {
           if (!isGM) return;
           ensureStateHasMaps(next);
-
-          // сохранить текущую карту в snapshot
           syncActiveToMap(next);
 
           const newId = (crypto?.randomUUID ? crypto.randomUUID() : ("map-" + Math.random().toString(16).slice(2)));
@@ -2168,28 +2210,24 @@ async function sendMessage(msg) {
           const maps = Array.isArray(next.maps) ? next.maps : [];
           const before = maps.length;
           next.maps = maps.filter(m => String(m?.id) !== id);
-
           if (before === next.maps.length) return;
 
-          // нельзя оставить комнату без карт
           if (!next.maps.length) {
             const init = createInitialGameState();
             next.maps = init.maps;
             next.mapSections = init.mapSections;
             next.currentMapId = init.currentMapId;
             loadMapToRoot(next, next.currentMapId);
-            logEventToState(next, `Удалена карта. Создана новая: ${getActiveMap(next)?.name || "Карта"}`);
-          } else {
-            if (String(next.currentMapId) === id) {
-              const fallback = next.maps[0];
-              loadMapToRoot(next, fallback?.id);
-            }
-            logEventToState(next, `Удалена карта: ${id}`);
+          } else if (String(next.currentMapId) === id) {
+            loadMapToRoot(next, next.maps[0]?.id);
           }
+
+          logEventToState(next, `Удалена карта: ${id}`);
         }
 
         else if (type === "switchCampaignMap") {
           if (!isGM) return;
+          ensureStateHasMaps(next);
           const targetId = String(msg.mapId || "");
           if (!targetId) return;
 
