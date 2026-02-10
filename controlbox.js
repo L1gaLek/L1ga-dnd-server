@@ -48,8 +48,9 @@
     // ===== Viewport (персональная ширина/высота рамки) =====
     const LS_VW = "dnd_viewport_cols";
     const LS_VH = "dnd_viewport_rows";
-    let viewportCols = clamp(readIntLs(LS_VW, Number(viewportWInput?.value) || 20), 5, 80);
-    let viewportRows = clamp(readIntLs(LS_VH, Number(viewportHInput?.value) || 20), 5, 80);
+    // По умолчанию рамка 10x10 (персональная настройка, хранится в localStorage)
+    let viewportCols = clamp(readIntLs(LS_VW, Number(viewportWInput?.value) || 10), 5, 80);
+    let viewportRows = clamp(readIntLs(LS_VH, Number(viewportHInput?.value) || 10), 5, 80);
 
     if (viewportWInput) viewportWInput.value = String(viewportCols);
     if (viewportHInput) viewportHInput.value = String(viewportRows);
