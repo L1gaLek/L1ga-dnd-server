@@ -95,8 +95,9 @@
     // эти инпуты видны только GM (в client.js applyRoleToUI), но логика тут
     applyGmBtn?.addEventListener('click', () => {
       if (!ctx.isGM?.()) return;
-      const w = clamp(Number(gmWInput?.value) || 20, 20, 150);
-      const h = clamp(Number(gmHInput?.value) || 20, 20, 150);
+      // Минимальный размер карты: 5x5
+      const w = clamp(Number(gmWInput?.value) || 10, 5, 150);
+      const h = clamp(Number(gmHInput?.value) || 10, 5, 150);
       if (gmWInput) gmWInput.value = String(w);
       if (gmHInput) gmHInput.value = String(h);
       ctx.sendMessage?.({ type: 'resizeBoard', width: w, height: h });
