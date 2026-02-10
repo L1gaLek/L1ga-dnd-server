@@ -1554,11 +1554,28 @@ function toggleWall(cell) {
 */
 
 createBoardBtn.addEventListener('click', () => {
+  // ВАЖНО: "Ширина поля/Высота поля" — это персональный вид (рамка/скролл),
+  // а не реальный размер карты. Реальный размер меняет только GM через "Применить карту".
   const width = parseInt(boardWidthInput.value, 10);
   const height = parseInt(boardHeightInput.value, 10);
-  if (isNaN(width) || isNaN(height) || width < 1 || height < 1 || width > 20 || height > 20)
-    return alert("Введите корректные размеры поля (1–20)");
-  sendMessage({ type: 'resizeBoard', width, height });
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return;
+
+  // Если подключен ControlBox — используем его (он меняет только viewport)
+  if (window.ControlBox && typeof window.ControlBox.setViewport === 'function') {
+    window.ControlBox.setViewport(width, height);
+    return;
+  }
+
+  // Fallback (на случай если controlbox.js не загрузился)
+  if (width < 5 || height < 5 || width > 80 || height > 80)
+    return alert("Введите корректные размеры поля (5–80)");
+
+  // Рамка = размер в пикселях (не меняет state)
+  try {
+    boardWrapper.style.overflow = 'auto';
+    boardWrapper.style.width = `${width * 50}px`;
+    boardWrapper.style.height = `${height * 50}px`;
+  } catch {}
 });
 
 /*
@@ -2014,11 +2031,36 @@ async function sendMessage(msg) {
       // ===== Dice live events =====
       case "diceEvent": {
         if (!currentRoomId || !roomChannel) return;
+
+        // 1) Живое событие в "панели бросков" (видят все)
         await roomChannel.send({
           type: "broadcast",
           event: "diceEvent",
           payload: { event: msg.event }
         });
+
+        // 2) Пишем в "Журнал действий" через room_state, чтобы это было видно всем
+        try {
+          const ev = msg.event || {};
+          const who = String(ev.fromName || safeGetUserName() || "Игрок").trim() || "Игрок";
+          const kind = String(ev.kindText || "").trim() || (ev.sides ? `d${ev.sides}` : "Бросок");
+          const rolls = Array.isArray(ev.rolls) ? ev.rolls.map(n => Number(n) || 0) : [];
+          const bonus = Number(ev.bonus) || 0;
+          const bonusTxt = bonus ? (bonus > 0 ? `+${bonus}` : `${bonus}`) : "";
+          const total = Number(ev.total);
+          const totalTxt = Number.isFinite(total) ? ` = ${total}` : "";
+          const critTxt = ev.crit === "crit-success" ? " (КРИТ)" : (ev.crit === "crit-fail" ? " (ПРОВАЛ)" : "");
+          const rollsTxt = rolls.length ? rolls.join(",") : "";
+          const body = rollsTxt ? `${rollsTxt}${bonusTxt}${totalTxt}` : (Number.isFinite(total) ? String(total) : "");
+          const line = `${who}: ${kind}: ${body}${critTxt}`.trim();
+
+          if (line && lastState) {
+            const next = deepClone(lastState);
+            logEventToState(next, line);
+            await upsertRoomState(currentRoomId, next);
+          }
+        } catch {}
+
         // also apply to self instantly
         if (msg.event) handleMessage({ type: "diceEvent", event: msg.event });
         break;
