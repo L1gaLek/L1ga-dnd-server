@@ -314,7 +314,7 @@
 
       // main event delegation
       overlay.addEventListener('click', (e) => {
-        const t = e.target;
+        const t = (e.target instanceof Element) ? e.target : (e.target && e.target.parentElement);
         if (t?.closest?.('[data-cmp-create-section]')) {
           if (!ctx.isGM?.()) return;
           const st = lastCampaignState || ctx.getState?.() || null;
