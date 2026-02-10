@@ -2131,10 +2131,12 @@ async function sendMessage(msg) {
         const ownsPlayer = (pl) => pl && String(pl.ownerId) === myUserId;
 
         const type = msg.type;
+        let handled = false;
 
         // ===== Campaign maps + sections (GM) =====
         if (type === "createMapSection") {
           if (!isGM) return;
+          handled = true;
           const name = String(msg.name || "").trim();
           if (!name) return;
           if (!Array.isArray(next.mapSections)) next.mapSections = [];
@@ -2145,6 +2147,7 @@ async function sendMessage(msg) {
 
         else if (type === "renameMapSection") {
           if (!isGM) return;
+          handled = true;
           const sectionId = String(msg.sectionId || "").trim();
           const name = String(msg.name || "").trim();
           if (!sectionId || !name) return;
@@ -2157,6 +2160,7 @@ async function sendMessage(msg) {
 
         else if (type === "deleteMapSection") {
           if (!isGM) return;
+          handled = true;
           const sectionId = String(msg.sectionId || "").trim();
           if (!sectionId) return;
           const mode = String(msg.mode || "").toLowerCase(); // 'move' | 'delete'
@@ -2206,6 +2210,7 @@ async function sendMessage(msg) {
 
         else if (type === "renameCampaignMap") {
           if (!isGM) return;
+          handled = true;
           const mapId = String(msg.mapId || "").trim();
           const name = String(msg.name || "").trim();
           if (!mapId || !name) return;
@@ -2218,6 +2223,7 @@ async function sendMessage(msg) {
 
         else if (type === "moveCampaignMap") {
           if (!isGM) return;
+          handled = true;
           const mapId = String(msg.mapId || "").trim();
           const toSectionId = String(msg.toSectionId || "").trim();
           if (!mapId || !toSectionId) return;
@@ -2233,6 +2239,7 @@ async function sendMessage(msg) {
 
         else if (type === "deleteCampaignMap") {
           if (!isGM) return;
+          handled = true;
           const mapId = String(msg.mapId || "").trim();
           if (!mapId) return;
 
@@ -2260,6 +2267,7 @@ async function sendMessage(msg) {
 
         else if (type === "createCampaignMap") {
           if (!isGM) return;
+          handled = true;
 
           // сохранить текущую карту в snapshot
           syncActiveToMap(next);
@@ -2288,6 +2296,7 @@ async function sendMessage(msg) {
 
         else if (type === "switchCampaignMap") {
           if (!isGM) return;
+          handled = true;
           const targetId = String(msg.mapId || "");
           if (!targetId) return;
 
@@ -2298,6 +2307,11 @@ async function sendMessage(msg) {
           logEventToState(next, `Переключение карты: ${m?.name || "Карта"}`);
         }
 
+
+        if (handled) {
+          await upsertRoomState(currentRoomId, next);
+          break;
+        }
 
         if (type === "resizeBoard") {
           if (!isGM) return;
