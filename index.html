@@ -193,16 +193,18 @@
             <button id="add-wall" disabled>Добавить стену</button>
             <button id="remove-wall" disabled>Удалить стену</button>
 
+            <div class="campaign-maps-box">
+              <div class="campaign-maps-title">Карты кампании</div>
+              <div class="campaign-maps-row">
+                <select id="campaign-maps-select" title="Выбор активной карты"></select>
+                <button id="create-campaign-map" type="button" title="Создать новую карту">Создать карту</button>
+              </div>
+            </div>
+
             <div class="env-bg-controls">
               <div class="env-bg-title">Подложка карты</div>
               <input id="board-bg-file" type="file" accept="image/*,.gif" />
               <button id="board-bg-clear" type="button">Убрать подложку</button>
-            </div>
-
-            <div class="campaign-maps-controls">
-              <div class="campaign-maps-title">Карты кампании</div>
-              <div class="campaign-maps-active">Активная карта: <span id="active-map-name">—</span></div>
-              <button id="campaign-params" type="button">Параметры</button>
             </div>
 
             <button id="clear-board">Очистить поле</button>
