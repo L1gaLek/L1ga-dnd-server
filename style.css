@@ -256,53 +256,64 @@ button:hover {
 #board-col {
   display: flex;
   flex-direction: column;
-  align-items: flex-start; /* настройки слева над полем */
+  align-items: center;
   gap: 10px;
   width: auto;
 }
 
-#board-col #current-turn,
-#board-col #board-settings {
+#board-col {
+  position: relative;
+}
+
+/* Верхняя строка над полем: слева текущий игрок, справа настройки поля */
+#board-topbar {
   width: 100%;
-  justify-content: flex-start;
-}
-
-/* ===== Настройки поля (две рамки без названия, слева над полем) ===== */
-.board-settings-wrap{
   display: flex;
-  gap: 12px;
+  justify-content: space-between;
   align-items: flex-start;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  margin-bottom: 2px;
+  gap: 12px;
 }
 
-.board-settings-box{
-  border: 1px solid #444;
-  border-radius: 10px;
-  background: #141414;
-  padding: 8px;
+#board-topbar #current-turn {
+  width: auto;
+  justify-content: flex-start;
+}
+
+#board-settings {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
 }
 
-.board-setting{
+.board-settings-box {
+  border: 1px solid #444;
+  border-radius: 10px;
+  background: #141414;
+  padding: 8px 10px;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
 }
 
-.board-setting-label{
-  font-size: 12px;
-  color: #ddd;
-  opacity: 0.9;
+.board-settings-box label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  white-space: nowrap;
 }
 
-/* инпуты для размеров — в 2 раза уже, чем обычные */
-.board-settings-box input[type="number"]{
-  width: 60px;
-  padding: 3px 6px;
+.board-settings-box input[type="number"] {
+  width: 60px; /* ~в 1.5 раза меньше */
+  padding: 4px 6px;
+}
+
+.board-settings-box button {
+  padding: 6px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
 }
 
 #right-panel {
