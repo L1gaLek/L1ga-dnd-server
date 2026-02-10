@@ -45,346 +45,6 @@
     const clearBoardBtn = document.getElementById('clear-board');
     const resetGameBtn = document.getElementById('reset-game');
 
-    // ===== Campaign maps (GM): параметры / разделы / карты =====
-    const paramsBtn = document.getElementById('campaign-params');
-    const activeMapNameEl = document.getElementById('active-map-name');
-
-    // controlbox управляет UI для карт, а сохранение/синхронизация делается через sendMessage
-    let mapsModal = null;
-    let mapsModalOpen = false;
-
-    function ensureModal() {
-      if (mapsModal) return mapsModal;
-
-      const overlay = document.createElement('div');
-      overlay.className = 'modal-overlay hidden';
-      overlay.id = 'campaignMapsModal';
-
-      overlay.innerHTML = `
-        <div class="modal" style="max-width: 880px;">
-          <div class="modal-header">
-            <div>
-              <div class="modal-title">Параметры карт кампании</div>
-              <div class="modal-subtitle">Разделы, создание и выбор карт</div>
-            </div>
-            <button class="modal-close" type="button" data-close>✕</button>
-          </div>
-
-          <div class="modal-body">
-            <div class="campaign-tools">
-              <button type="button" id="cm-create-section">Создать раздел</button>
-              <button type="button" id="cm-create-map">Создать карту</button>
-            </div>
-
-            <div class="campaign-sections-grid" id="cm-sections"></div>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(overlay);
-
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) closeModal();
-      });
-      overlay.querySelector('[data-close]')?.addEventListener('click', closeModal);
-
-      mapsModal = overlay;
-      return mapsModal;
-    }
-
-    function openModal() {
-      if (!ctx.isGM?.()) return;
-      const m = ensureModal();
-      m.classList.remove('hidden');
-      mapsModalOpen = true;
-      rebuildModal();
-    }
-
-    function closeModal() {
-      if (!mapsModal) return;
-      mapsModal.classList.add('hidden');
-      mapsModalOpen = false;
-    }
-
-    function safeText(s) {
-      return String(s ?? '').replace(/[&<>"']/g, (ch) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-      }[ch]));
-    }
-
-    function getSectionsAndMaps() {
-      const st = ctx.getState?.() || {};
-      const sections = Array.isArray(st.mapSections) ? st.mapSections : [];
-      const maps = Array.isArray(st.maps) ? st.maps : [];
-      const currentMapId = String(st.currentMapId || '');
-      return { st, sections, maps, currentMapId };
-    }
-
-    function defaultSectionName(sections) {
-      let n = 1;
-      const names = new Set(sections.map(s => String(s?.name || '').trim().toLowerCase()));
-      while (names.has((`раздел ${n}`).toLowerCase())) n++;
-      return `Раздел ${n}`;
-    }
-
-    function defaultMapName(maps) {
-      // "Карта1", "Карта2" ... (без пробела, как ты просил ранее)
-      let n = 1;
-      const names = new Set(maps.map(m => String(m?.name || '').trim().toLowerCase()));
-      while (names.has((`карта${n}`).toLowerCase())) n++;
-      return `Карта${n}`;
-    }
-
-    function renderSectionCard(sec, mapsInSection, currentMapId, sections) {
-      const secId = String(sec?.id || '');
-      const title = safeText(sec?.name || 'Раздел');
-
-      const mapsRows = mapsInSection.map(m => {
-        const mid = String(m?.id || '');
-        const active = mid && mid === currentMapId;
-        return `
-          <div class="cm-map-row ${active ? 'is-active' : ''}">
-            <div class="cm-map-name" title="${safeText(m?.name || '')}">${safeText(m?.name || 'Карта')}</div>
-            <div class="cm-map-actions">
-              <button type="button" data-action="select-map" data-map-id="${safeText(mid)}">Выбрать</button>
-              <button type="button" data-action="delete-map" data-map-id="${safeText(mid)}">Удалить</button>
-            </div>
-          </div>
-        `;
-      }).join('') || `<div class="cm-empty">Нет карт</div>`;
-
-      const canDelete = sections.length > 1 || mapsInSection.length > 0; // удалять можно всегда, но UX: покажем кнопку
-
-      return `
-        <div class="cm-section" data-section-id="${safeText(secId)}">
-          <div class="cm-section-head">
-            <div class="cm-section-title">${title}</div>
-            <div class="cm-section-actions">
-              <button type="button" data-action="rename-section" data-section-id="${safeText(secId)}" title="Переименовать">✎</button>
-              ${canDelete ? `<button type="button" data-action="delete-section" data-section-id="${safeText(secId)}" title="Удалить">🗑</button>` : ''}
-            </div>
-          </div>
-          <div class="cm-maps">
-            ${mapsRows}
-          </div>
-        </div>
-      `;
-    }
-
-    function rebuildModal() {
-      const modal = ensureModal();
-      const sectionsEl = modal.querySelector('#cm-sections');
-      const createSectionBtn = modal.querySelector('#cm-create-section');
-      const createMapBtn = modal.querySelector('#cm-create-map');
-      if (!sectionsEl || !createSectionBtn || !createMapBtn) return;
-
-      // bind top buttons once
-      if (!createSectionBtn.dataset.bound) {
-        createSectionBtn.dataset.bound = '1';
-        createSectionBtn.addEventListener('click', () => {
-          if (!ctx.isGM?.()) return;
-          const { sections } = getSectionsAndMaps();
-          const def = defaultSectionName(sections);
-          const name = prompt('Название раздела:', def);
-          if (!name) return;
-          const finalName = String(name).trim();
-          if (!finalName) return;
-          ctx.sendMessage?.({ type: 'createMapSection', name: finalName });
-          // через realtime state обновится, но перерисуем для отзывчивости
-          setTimeout(rebuildModal, 50);
-        });
-      }
-
-      if (!createMapBtn.dataset.bound) {
-        createMapBtn.dataset.bound = '1';
-        createMapBtn.addEventListener('click', () => {
-          if (!ctx.isGM?.()) return;
-          const { sections, maps } = getSectionsAndMaps();
-          if (!sections.length) {
-            alert('Сначала создайте раздел.');
-            return;
-          }
-
-          // Выбор раздела (выпадающий список через prompt-подбор):
-          // Чтобы реально было именно dropdown — делаем небольшой встроенный диалог.
-          showCreateMapDialog(sections, maps);
-        });
-      }
-
-      const { sections, maps, currentMapId } = getSectionsAndMaps();
-
-      // 2 колонки раскладкой управляет CSS
-      const html = sections.map(sec => {
-        const secId = String(sec?.id || '');
-        const mapsIn = maps.filter(m => String(m?.sectionId || '') === secId);
-        return renderSectionCard(sec, mapsIn, currentMapId, sections);
-      }).join('');
-
-      sectionsEl.innerHTML = html || `<div class="cm-empty">Разделов нет</div>`;
-
-      // делегирование событий внутри модалки
-      if (!sectionsEl.dataset.bound) {
-        sectionsEl.dataset.bound = '1';
-        sectionsEl.addEventListener('click', (e) => {
-          const btn = e.target.closest('button');
-          if (!btn) return;
-          const action = btn.dataset.action;
-          if (!action) return;
-
-          if (action === 'select-map') {
-            const mapId = String(btn.dataset.mapId || '');
-            if (!mapId) return;
-            ctx.sendMessage?.({ type: 'switchCampaignMap', mapId });
-            // закрываем, чтобы было понятно, что выбор применился
-            closeModal();
-            return;
-          }
-
-          if (action === 'delete-map') {
-            const mapId = String(btn.dataset.mapId || '');
-            if (!mapId) return;
-            if (!confirm('Удалить эту карту?')) return;
-            ctx.sendMessage?.({ type: 'deleteCampaignMap', mapId });
-            setTimeout(rebuildModal, 80);
-            return;
-          }
-
-          if (action === 'rename-section') {
-            const sid = String(btn.dataset.sectionId || '');
-            const { sections } = getSectionsAndMaps();
-            const sec = sections.find(s => String(s?.id) === sid);
-            if (!sec) return;
-            const name = prompt('Новое название раздела:', sec.name || 'Раздел');
-            if (!name) return;
-            const finalName = String(name).trim();
-            if (!finalName) return;
-            ctx.sendMessage?.({ type: 'renameMapSection', sectionId: sid, name: finalName });
-            setTimeout(rebuildModal, 80);
-            return;
-          }
-
-          if (action === 'delete-section') {
-            const sid = String(btn.dataset.sectionId || '');
-            handleDeleteSection(sid);
-            return;
-          }
-        });
-      }
-    }
-
-    function showCreateMapDialog(sections, maps) {
-      const modal = ensureModal();
-
-      // удаляем старый диалог, если был
-      modal.querySelector('#cm-create-map-dialog')?.remove();
-
-      const wrap = document.createElement('div');
-      wrap.id = 'cm-create-map-dialog';
-      wrap.className = 'cm-dialog';
-
-      const options = sections.map(s => `<option value="${safeText(String(s.id))}">${safeText(s.name)}</option>`).join('');
-      const defName = defaultMapName(maps);
-
-      wrap.innerHTML = `
-        <div class="cm-dialog-card">
-          <div class="cm-dialog-title">Создать карту</div>
-          <label class="cm-field">
-            <div class="cm-label">Раздел</div>
-            <select id="cm-new-map-section">${options}</select>
-          </label>
-          <label class="cm-field">
-            <div class="cm-label">Название карты</div>
-            <input id="cm-new-map-name" type="text" value="${safeText(defName)}" />
-          </label>
-          <div class="cm-dialog-actions">
-            <button type="button" id="cm-new-map-cancel">Отмена</button>
-            <button type="button" id="cm-new-map-create">Создать</button>
-          </div>
-        </div>
-      `;
-
-      // вставим сверху списка
-      modal.querySelector('.modal-body')?.prepend(wrap);
-
-      wrap.querySelector('#cm-new-map-cancel')?.addEventListener('click', () => wrap.remove());
-      wrap.querySelector('#cm-new-map-create')?.addEventListener('click', () => {
-        if (!ctx.isGM?.()) return;
-        const secId = String(wrap.querySelector('#cm-new-map-section')?.value || '').trim();
-        const name = String(wrap.querySelector('#cm-new-map-name')?.value || '').trim();
-        if (!secId) { alert('Выберите раздел'); return; }
-        if (!name) { alert('Введите название карты'); return; }
-        ctx.sendMessage?.({ type: 'createCampaignMap', sectionId: secId, name });
-        wrap.remove();
-        setTimeout(rebuildModal, 120);
-      });
-    }
-
-    function handleDeleteSection(sectionId) {
-      if (!ctx.isGM?.()) return;
-      const { sections, maps } = getSectionsAndMaps();
-      const sid = String(sectionId || '').trim();
-      const sec = sections.find(s => String(s?.id) === sid);
-      if (!sec) return;
-
-      const mapsIn = maps.filter(m => String(m?.sectionId || '') === sid);
-
-      if (!mapsIn.length) {
-        if (!confirm(`Удалить раздел "${sec.name}"?`)) return;
-        ctx.sendMessage?.({ type: 'deleteMapSection', sectionId: sid, moveToSectionId: null });
-        setTimeout(rebuildModal, 120);
-        return;
-      }
-
-      // есть карты: предложим перенос или удаление
-      const other = sections.filter(s => String(s?.id) !== sid);
-      const choice = confirm(
-        `В разделе "${sec.name}" есть ${mapsIn.length} карт.\n\nOK — перенести карты в другой раздел\nОтмена — удалить раздел вместе с картами`
-      );
-
-      if (!choice) {
-        if (!confirm('Точно удалить раздел и все карты в нём?')) return;
-        ctx.sendMessage?.({ type: 'deleteMapSection', sectionId: sid, moveToSectionId: null });
-        setTimeout(rebuildModal, 160);
-        return;
-      }
-
-      // перенос
-      const list = other.map((s, i) => `${i + 1}) ${s.name}`).join('\n');
-      const nStr = prompt(`В какой раздел перенести карты?\n${list}\n\nВведите номер:`, '1');
-      const n = Number(nStr);
-      if (!Number.isFinite(n) || n < 1 || n > other.length) return;
-      const target = other[n - 1];
-      ctx.sendMessage?.({ type: 'deleteMapSection', sectionId: sid, moveToSectionId: String(target.id) });
-      setTimeout(rebuildModal, 160);
-    }
-
-    function refreshActiveMapLabel() {
-      if (!activeMapNameEl) return;
-      const { st, maps } = getSectionsAndMaps();
-      const curId = String(st.currentMapId || '');
-      const cur = maps.find(m => String(m?.id) === curId) || maps[0] || null;
-      activeMapNameEl.textContent = cur?.name || '—';
-    }
-
-    // Кнопка "Параметры" (только GM)
-    paramsBtn?.addEventListener('click', (e) => {
-      e.preventDefault();
-      openModal();
-    });
-
-    // Обновляем подпись активной карты постоянно (дёшево, зато без правок client.js)
-    refreshActiveMapLabel();
-    const _mapsUiTimer = setInterval(() => {
-      try {
-        refreshActiveMapLabel();
-        if (mapsModalOpen) rebuildModal();
-      } catch {}
-    }, 600);
-
     // ===== Viewport (персональная ширина/высота рамки) =====
     const LS_VW = "dnd_viewport_cols";
     const LS_VH = "dnd_viewport_rows";
@@ -488,7 +148,6 @@
     function setEnvButtons() {
       const gm = !!ctx.isGM?.();
       if (editEnvBtn) editEnvBtn.disabled = !gm;
-      if (paramsBtn) paramsBtn.disabled = !gm;
       if (addWallBtn) addWallBtn.disabled = !(gm && editEnvironment);
       if (removeWallBtn) removeWallBtn.disabled = !(gm && editEnvironment);
       if (clearBoardBtn) clearBoardBtn.disabled = !gm;
@@ -572,19 +231,376 @@
       dragTouched = new Set();
     });
 
+    // ===== Campaign maps / sections (GM): Parameters modal =====
+    const campaignParamsBtn = document.getElementById('campaign-params');
+    const activeMapNameSpan = document.getElementById('campaign-active-map-name');
+
+    let cmpOverlay = null;
+    let cmpOpen = false;
+    let lastCampaignState = null;
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>\"]/g, (c) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;'
+      }[c] || c));
+    }
+
+    function ensureCmpOverlay() {
+      if (cmpOverlay) return cmpOverlay;
+
+      const overlay = document.createElement('div');
+      overlay.className = 'cmp-overlay hidden';
+      overlay.setAttribute('aria-hidden', 'true');
+      overlay.innerHTML = `
+        <div class="cmp-modal" role="dialog" aria-modal="true">
+          <div class="cmp-modal-header">
+            <div class="cmp-modal-title">Параметры</div>
+            <button class="cmp-modal-close" type="button" title="Закрыть">✕</button>
+          </div>
+
+          <div class="cmp-modal-body">
+            <div class="cmp-toolbar">
+              <button type="button" class="cmp-btn" data-cmp-create-section>Создать раздел</button>
+              <button type="button" class="cmp-btn" data-cmp-create-map>Создать карту</button>
+              <div style="flex:1"></div>
+              <button type="button" class="cmp-btn" data-cmp-refresh>Обновить</button>
+            </div>
+
+            <div class="cmp-dialog hidden" data-cmp-dialog="create-map">
+              <div class="cmp-dialog-title">Создать карту</div>
+              <div class="cmp-dialog-row">
+                <label>Раздел</label>
+                <select data-cmp-create-map-section></select>
+              </div>
+              <div class="cmp-dialog-row">
+                <label>Название</label>
+                <input type="text" data-cmp-create-map-name />
+              </div>
+              <div class="cmp-dialog-actions">
+                <button type="button" data-cmp-create-map-cancel>Отмена</button>
+                <button type="button" data-cmp-create-map-ok>Создать</button>
+              </div>
+            </div>
+
+            <div class="cmp-sections" data-cmp-sections></div>
+          </div>
+        </div>
+      `;
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeCmp();
+      });
+      overlay.querySelector('.cmp-modal-close')?.addEventListener('click', closeCmp);
+      overlay.querySelector('[data-cmp-refresh]')?.addEventListener('click', () => renderCampaignParams(lastCampaignState || ctx.getState?.() || null));
+
+      // dialogs
+      overlay.querySelector('[data-cmp-create-map-cancel]')?.addEventListener('click', () => setDialogVisible('create-map', false));
+      overlay.querySelector('[data-cmp-create-map-ok]')?.addEventListener('click', () => {
+        if (!ctx.isGM?.()) return;
+        const st = lastCampaignState || ctx.getState?.() || null;
+        const secSel = overlay.querySelector('[data-cmp-create-map-section]');
+        const nameInp = overlay.querySelector('[data-cmp-create-map-name]');
+        const sectionId = String(secSel?.value || '').trim();
+        const name = String(nameInp?.value || '').trim();
+        if (!sectionId) return alert('Выберите раздел');
+        if (!name) return alert('Введите название карты');
+        ctx.sendMessage?.({ type: 'createCampaignMap', sectionId, name });
+        setDialogVisible('create-map', false);
+        // обновим через приход нового state
+      });
+
+      // main event delegation
+      overlay.addEventListener('click', (e) => {
+        const t = e.target;
+        if (t?.closest?.('[data-cmp-create-section]')) {
+          if (!ctx.isGM?.()) return;
+          const st = lastCampaignState || ctx.getState?.() || null;
+          const def = getNextDefaultSectionName(st);
+          const name = prompt('Название раздела:', def);
+          if (name === null) return;
+          const clean = String(name).trim();
+          if (!clean) return;
+          ctx.sendMessage?.({ type: 'createMapSection', name: clean });
+          return;
+        }
+
+        if (t?.closest?.('[data-cmp-create-map]')) {
+          if (!ctx.isGM?.()) return;
+          openCreateMapDialog(lastCampaignState || ctx.getState?.() || null);
+          return;
+        }
+
+        const selBtn = t?.closest?.('[data-cmp-select-map]');
+        if (selBtn) {
+          if (!ctx.isGM?.()) return;
+          const mapId = String(selBtn.getAttribute('data-cmp-select-map') || '').trim();
+          if (!mapId) return;
+          ctx.sendMessage?.({ type: 'switchCampaignMap', mapId });
+          return;
+        }
+
+        const delMapBtn = t?.closest?.('[data-cmp-delete-map]');
+        if (delMapBtn) {
+          if (!ctx.isGM?.()) return;
+          const mapId = String(delMapBtn.getAttribute('data-cmp-delete-map') || '').trim();
+          const mapName = String(delMapBtn.getAttribute('data-cmp-delete-name') || '').trim();
+          if (!mapId) return;
+          if (!confirm(`Удалить карту "${mapName || 'Без названия'}"?`)) return;
+          ctx.sendMessage?.({ type: 'deleteCampaignMap', mapId });
+          return;
+        }
+
+        const renMapBtn = t?.closest?.('[data-cmp-rename-map]');
+        if (renMapBtn) {
+          if (!ctx.isGM?.()) return;
+          const mapId = String(renMapBtn.getAttribute('data-cmp-rename-map') || '').trim();
+          const curName = String(renMapBtn.getAttribute('data-cmp-rename-name') || '').trim();
+          if (!mapId) return;
+          const name = prompt('Новое название карты:', curName || 'Карта');
+          if (name === null) return;
+          const clean = String(name).trim();
+          if (!clean) return;
+          ctx.sendMessage?.({ type: 'renameCampaignMap', mapId, name: clean });
+          return;
+        }
+
+        const moveMapBtn = t?.closest?.('[data-cmp-move-map]');
+        if (moveMapBtn) {
+          if (!ctx.isGM?.()) return;
+          const mapId = String(moveMapBtn.getAttribute('data-cmp-move-map') || '').trim();
+          const row = moveMapBtn.closest('.cmp-map-row');
+          const sel = row?.querySelector?.('select[data-cmp-move-target]');
+          const toSectionId = String(sel?.value || '').trim();
+          if (!mapId || !toSectionId) return;
+          ctx.sendMessage?.({ type: 'moveCampaignMap', mapId, toSectionId });
+          return;
+        }
+
+        const renSecBtn = t?.closest?.('[data-cmp-rename-section]');
+        if (renSecBtn) {
+          if (!ctx.isGM?.()) return;
+          const sectionId = String(renSecBtn.getAttribute('data-cmp-rename-section') || '').trim();
+          const curName = String(renSecBtn.getAttribute('data-cmp-rename-name') || '').trim();
+          if (!sectionId) return;
+          const name = prompt('Новое название раздела:', curName || 'Раздел');
+          if (name === null) return;
+          const clean = String(name).trim();
+          if (!clean) return;
+          ctx.sendMessage?.({ type: 'renameMapSection', sectionId, name: clean });
+          return;
+        }
+
+        const delSecBtn = t?.closest?.('[data-cmp-delete-section]');
+        if (delSecBtn) {
+          if (!ctx.isGM?.()) return;
+          const sectionId = String(delSecBtn.getAttribute('data-cmp-delete-section') || '').trim();
+          const secName = String(delSecBtn.getAttribute('data-cmp-delete-name') || '').trim();
+          if (!sectionId) return;
+          const st = lastCampaignState || ctx.getState?.() || null;
+          const mapsIn = (Array.isArray(st?.maps) ? st.maps : []).filter(m => String(m?.sectionId || '') === sectionId);
+          const sections = Array.isArray(st?.mapSections) ? st.mapSections : [];
+          if (sections.length <= 1) {
+            alert('Нельзя удалить последний раздел.');
+            return;
+          }
+
+          if (!mapsIn.length) {
+            if (!confirm(`Удалить раздел "${secName || 'Раздел'}"?`)) return;
+            ctx.sendMessage?.({ type: 'deleteMapSection', sectionId, mode: 'delete' });
+            return;
+          }
+
+          // если есть карты — спросим, переносить ли
+          const move = confirm(`В разделе "${secName || 'Раздел'}" есть карты (${mapsIn.length}).\n\nOK — перенести карты в другой раздел и удалить раздел.\nОтмена — удалить раздел вместе с картами.`);
+          if (move) {
+            const other = sections.filter(s => String(s?.id) !== sectionId);
+            const list = other.map((s, i) => `${i + 1}) ${s.name}`).join('\n');
+            const pick = prompt(`Куда перенести карты?\n${list}`, '1');
+            if (pick === null) return;
+            const idx = Math.max(1, Math.min(other.length, Number(pick) || 1)) - 1;
+            const targetSectionId = String(other[idx]?.id || '').trim();
+            if (!targetSectionId) return;
+            ctx.sendMessage?.({ type: 'deleteMapSection', sectionId, mode: 'move', targetSectionId });
+          } else {
+            if (!confirm(`Точно удалить раздел "${secName || 'Раздел'}" вместе со всеми картами?`)) return;
+            ctx.sendMessage?.({ type: 'deleteMapSection', sectionId, mode: 'delete' });
+          }
+          return;
+        }
+      });
+
+      document.body.appendChild(overlay);
+      cmpOverlay = overlay;
+      return overlay;
+    }
+
+    function setDialogVisible(which, visible) {
+      const overlay = ensureCmpOverlay();
+      const dlg = overlay.querySelector(`.cmp-dialog[data-cmp-dialog="${which}"]`);
+      if (!dlg) return;
+      dlg.classList.toggle('hidden', !visible);
+    }
+
+    function openCmp() {
+      const overlay = ensureCmpOverlay();
+      cmpOpen = true;
+      overlay.classList.remove('hidden');
+      overlay.setAttribute('aria-hidden', 'false');
+      renderCampaignParams(lastCampaignState || ctx.getState?.() || null);
+    }
+
+    function closeCmp() {
+      if (!cmpOverlay) return;
+      cmpOpen = false;
+      cmpOverlay.classList.add('hidden');
+      cmpOverlay.setAttribute('aria-hidden', 'true');
+      setDialogVisible('create-map', false);
+    }
+
+    function getNextDefaultSectionName(st) {
+      const sections = Array.isArray(st?.mapSections) ? st.mapSections : [];
+      const names = new Set(sections.map(s => String(s?.name || '').trim()).filter(Boolean));
+      let i = sections.length + 1;
+      while (names.has(`Раздел ${i}`)) i++;
+      return `Раздел ${i}`;
+    }
+
+    function getNextDefaultMapName(st) {
+      const maps = Array.isArray(st?.maps) ? st.maps : [];
+      const names = new Set(maps.map(m => String(m?.name || '').trim()).filter(Boolean));
+      let i = maps.length + 1;
+      while (names.has(`Карта ${i}`) || names.has(`Карта ${i}`)) i++;
+      // для совместимости используем без пробела (как пользователь просил ранее)
+      return `Карта${i}`;
+    }
+
+    function openCreateMapDialog(st) {
+      const overlay = ensureCmpOverlay();
+      const sections = Array.isArray(st?.mapSections) ? st.mapSections : [];
+      if (!sections.length) {
+        alert('Сначала создайте раздел.');
+        return;
+      }
+      const sel = overlay.querySelector('[data-cmp-create-map-section]');
+      const inp = overlay.querySelector('[data-cmp-create-map-name]');
+      if (sel) {
+        sel.innerHTML = sections.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+      }
+      if (inp) inp.value = getNextDefaultMapName(st);
+      setDialogVisible('create-map', true);
+      try { inp?.focus?.(); inp?.select?.(); } catch {}
+    }
+
+    function renderCampaignParams(st) {
+      const overlay = ensureCmpOverlay();
+      lastCampaignState = st;
+      const sectionsEl = overlay.querySelector('[data-cmp-sections]');
+      if (!sectionsEl) return;
+
+      const sections = Array.isArray(st?.mapSections) ? st.mapSections : [];
+      const maps = Array.isArray(st?.maps) ? st.maps : [];
+      const curId = String(st?.currentMapId || '');
+
+      // подпись активной карты справа
+      try {
+        const active = maps.find(m => String(m?.id) === curId) || maps[0] || null;
+        if (activeMapNameSpan) activeMapNameSpan.textContent = active?.name || '—';
+      } catch {}
+
+      if (!sections.length) {
+        sectionsEl.innerHTML = `<div class="cmp-empty">Разделов пока нет. Нажмите «Создать раздел».</div>`;
+        return;
+      }
+
+      const bySec = new Map();
+      sections.forEach(s => bySec.set(String(s.id), []));
+      maps.forEach(m => {
+        const sid = String(m?.sectionId || sections[0]?.id || '');
+        if (!bySec.has(sid)) bySec.set(sid, []);
+        bySec.get(sid).push(m);
+      });
+
+      const sectionOptions = sections.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+
+      sectionsEl.innerHTML = sections.map(s => {
+        const sid = String(s.id);
+        const arr = bySec.get(sid) || [];
+        const mapsHtml = arr.length ? arr.map(m => {
+          const mid = String(m?.id);
+          const isActive = (mid === curId);
+          const bw = Number(m?.boardWidth) || 10;
+          const bh = Number(m?.boardHeight) || 10;
+          return `
+            <div class="cmp-map-row${isActive ? ' is-active' : ''}">
+              <div>
+                <div class="cmp-map-title">${escapeHtml(m?.name || 'Без названия')}</div>
+                <div class="cmp-map-meta">${bw}×${bh} клеток</div>
+              </div>
+              <div class="cmp-map-actions">
+                <button type="button" data-cmp-select-map="${escapeHtml(mid)}">Выбрать</button>
+                <button type="button" data-cmp-rename-map="${escapeHtml(mid)}" data-cmp-rename-name="${escapeHtml(m?.name || '')}">Переименовать</button>
+                <button type="button" data-cmp-delete-map="${escapeHtml(mid)}" data-cmp-delete-name="${escapeHtml(m?.name || '')}">Удалить</button>
+                <div class="cmp-move">
+                  <select data-cmp-move-target>
+                    ${sections.map(sec => `<option value="${escapeHtml(sec.id)}" ${String(sec.id) === String(m?.sectionId) ? 'selected' : ''}>${escapeHtml(sec.name)}</option>`).join('')}
+                  </select>
+                  <button type="button" data-cmp-move-map="${escapeHtml(mid)}">Перенести</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('') : `<div class="cmp-empty">В этом разделе пока нет карт.</div>`;
+
+        return `
+          <div class="cmp-section">
+            <div class="cmp-section-head">
+              <div class="cmp-section-name">${escapeHtml(s?.name || 'Раздел')}</div>
+              <div class="cmp-section-actions">
+                <button type="button" title="Переименовать" data-cmp-rename-section="${escapeHtml(sid)}" data-cmp-rename-name="${escapeHtml(s?.name || '')}">✎</button>
+                <button type="button" title="Удалить раздел" data-cmp-delete-section="${escapeHtml(sid)}" data-cmp-delete-name="${escapeHtml(s?.name || '')}">🗑</button>
+              </div>
+            </div>
+            <div class="cmp-maps">${mapsHtml}</div>
+          </div>
+        `;
+      }).join('');
+
+      // refresh create-map section list
+      const sel = overlay.querySelector('[data-cmp-create-map-section]');
+      if (sel) sel.innerHTML = sectionOptions;
+    }
+
+    campaignParamsBtn?.addEventListener('click', () => {
+      if (!ctx.isGM?.()) return;
+      openCmp();
+    });
+
     // ===== initial =====
     setEnvButtons();
     refreshGmInputsFromState();
-    refreshActiveMapLabel();
 
     // обновление инпутов при каждом новом state
     window.ControlBox = {
       setViewport,
       refreshGmInputsFromState,
-      openCampaignParams: openModal,
-      refreshCampaignUI: () => { refreshActiveMapLabel(); if (mapsModalOpen) rebuildModal(); },
       getViewport: () => ({ cols: viewportCols, rows: viewportRows }),
       getZoom: () => zoom
+      ,
+      openCampaignParams: () => { if (ctx.isGM?.()) openCmp(); },
+      updateCampaignParams: (st) => {
+        lastCampaignState = st;
+        if (cmpOpen) renderCampaignParams(st);
+        // даже если модалка закрыта — обновляем подпись активной карты
+        try {
+          const maps = Array.isArray(st?.maps) ? st.maps : [];
+          const curId = String(st?.currentMapId || '');
+          const active = maps.find(m => String(m?.id) === curId) || maps[0] || null;
+          if (activeMapNameSpan) activeMapNameSpan.textContent = active?.name || '—';
+        } catch {}
+      }
     };
   };
 })();
