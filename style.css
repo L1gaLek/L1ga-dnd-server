@@ -146,15 +146,56 @@ button:hover {
   background-color: #111;
 }
 
-/* Подложка карты (картинка/.gif). Растягивается на весь размер поля */
+/* Подложка карты (картинка / gif под сеткой) */
 #board-bg {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
   z-index: 0;
   background-repeat: no-repeat;
   background-position: center;
-  background-size: 100% 100%;
-  pointer-events: none;
+  background-size: 100% 100%; /* растягиваем под реальный размер карты */
+}
+
+/* Все клетки должны быть выше подложки */
+.cell {
+  position: relative;
+  z-index: 1;
+}
+
+/* Игроки поверх всего */
+.player {
+  z-index: 2;
+}
+
+/* Когда подложка включена — клетки полупрозрачные, но сетка видна */
+#game-board.has-bg .cell {
+  background-color: rgba(42, 42, 42, 0.35);
+}
+
+#game-board.has-bg .cell.wall {
+  background-color: rgba(85, 85, 85, 0.95) !important;
+}
+
+/* Разделитель и блок подложки в редакторе окружения */
+.env-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.1);
+  margin: 10px 0;
+}
+
+.env-bg-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.env-bg-title {
+  font-size: 12px;
+  opacity: 0.85;
 }
 
 /* Клетки поля */
@@ -166,21 +207,11 @@ button:hover {
 
   /* вместо border */
   outline: 1px solid #444;
-
-  /* поверх подложки */
-  position: relative;
-  z-index: 1;
-}
-
-/* Когда установлена подложка — делаем клетки полупрозрачными, но сетка видна */
-#game-board.has-bg .cell {
-  background-color: rgba(42, 42, 42, 0.28);
 }
 
 /* Игроки */
 .player {
   position: absolute;
-  z-index: 2;
   border-radius: 50%;
   color: white;
   font-weight: bold;
@@ -294,25 +325,6 @@ button:hover {
 
 .side-box button:last-child {
   margin-bottom: 0;
-}
-
-.side-sep {
-  height: 1px;
-  background: #333;
-  margin: 10px 0;
-}
-
-.side-subtitle {
-  font-size: 12px;
-  color: #ddd;
-  margin: 0 0 6px 0;
-}
-
-.side-hint {
-  font-size: 11px;
-  color: #aaa;
-  margin: 6px 0 10px 0;
-  line-height: 1.2;
 }
 
 /* Подсветки фаз (используем классы на конкретных кнопках) */
