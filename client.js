@@ -67,6 +67,11 @@ const startExplorationBtn = document.getElementById("start-exploration");
 const worldPhasesBox = document.getElementById('world-phases');
 const envEditorBox = document.getElementById('env-editor');
 
+// ===== Подложка карты (ГМ) =====
+const boardBgEl = document.getElementById('board-bg');
+const boardBgFileInput = document.getElementById('board-bg-file');
+const boardBgClearBtn = document.getElementById('board-bg-clear');
+
 // ================== VARIABLES ==================
 // Supabase replaces our old Node/WebSocket server.
 // GitHub Pages hosts only static files; realtime + DB are handled by Supabase.
@@ -139,8 +144,7 @@ function applyRoleToUI() {
   const gmOnlyIds = [
     'clear-board','reset-game',
     'start-exploration','start-initiative','start-combat',
-    'edit-environment','add-wall','remove-wall',
-    'board-bg-file','board-bg-clear'
+    'edit-environment','add-wall','remove-wall'
   ];
   gmOnlyIds.forEach((id) => {
     const el = document.getElementById(id);
@@ -153,35 +157,59 @@ function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
     fr.onload = () => resolve(String(fr.result || ""));
-    fr.onerror = () => reject(fr.error || new Error('FileReader error'));
+    fr.onerror = () => reject(fr.error || new Error("FileReader error"));
     fr.readAsDataURL(file);
   });
 }
 
-boardBgFileInput?.addEventListener('change', async (e) => {
-  try {
-    if (!isGM()) return;
-    const file = e?.target?.files?.[0];
-    if (!file) return;
-    // мягкий лимит, чтобы не раздувать состояние комнаты
-    if (file.size > 8 * 1024 * 1024) {
-      alert('Файл слишком большой. Рекомендуется до 8 МБ.');
-      e.target.value = '';
-      return;
-    }
-    const dataUrl = await readFileAsDataUrl(file);
-    await sendMessage({ type: 'setBoardBg', dataUrl });
-    e.target.value = '';
-  } catch (err) {
-    console.error(err);
-    alert('Не удалось загрузить подложку');
-  }
-});
+if (boardBgFileInput) {
+  boardBgFileInput.addEventListener('change', async (e) => {
+    try {
+      if (!isGM()) return;
+      const file = e?.target?.files?.[0];
+      if (!file) return;
 
-boardBgClearBtn?.addEventListener('click', async () => {
-  if (!isGM()) return;
-  await sendMessage({ type: 'clearBoardBg' });
-});
+      // мягкий лимит, чтобы не раздувать room_state
+      if (file.size > 8 * 1024 * 1024) {
+        alert('Файл слишком большой. Рекомендуется до 8 МБ.');
+        e.target.value = '';
+        return;
+      }
+
+      const dataUrl = await readFileAsDataUrl(file);
+      await sendMessage({ type: 'setBoardBg', dataUrl });
+      e.target.value = '';
+    } catch (err) {
+      console.error(err);
+      alert('Не удалось загрузить подложку');
+    }
+  });
+}
+
+if (boardBgClearBtn) {
+  boardBgClearBtn.addEventListener('click', async () => {
+    if (!isGM()) return;
+    await sendMessage({ type: 'clearBoardBg' });
+  });
+}
+
+function applyBoardBackgroundToDom(state) {
+  // гарантируем наличие слоя подложки (на случай старого HTML)
+  let bg = boardBgEl || document.getElementById('board-bg');
+  if (!bg && board) {
+    bg = document.createElement('div');
+    bg.id = 'board-bg';
+    bg.setAttribute('aria-hidden', 'true');
+    board.prepend(bg);
+  }
+  if (!bg || !board) return;
+
+  const dataUrl = state?.boardBgDataUrl || null;
+  bg.style.backgroundImage = dataUrl ? `url(${dataUrl})` : 'none';
+  bg.style.width = `${boardWidth * 50}px`;
+  bg.style.height = `${boardHeight * 50}px`;
+  board.classList.toggle('has-bg', !!dataUrl);
+}
 let currentRoomId = null;
 
 let heartbeatTimer = null;
@@ -805,19 +833,8 @@ function renderBoard(state) {
   board.style.gridTemplateColumns = `repeat(${boardWidth}, 50px)`;
   board.style.gridTemplateRows = `repeat(${boardHeight}, 50px)`;
 
-  // ===== Подложка карты (растягиваем под реальный размер карты ГМа) =====
-  if (boardBgEl) {
-    boardBgEl.style.width = `${boardWidth * 50}px`;
-    boardBgEl.style.height = `${boardHeight * 50}px`;
-    const bg = String(state?.boardBg || state?.board_bg || "");
-    if (bg) {
-      boardBgEl.style.backgroundImage = `url(${bg})`;
-      board.classList.add('has-bg');
-    } else {
-      boardBgEl.style.backgroundImage = '';
-      board.classList.remove('has-bg');
-    }
-  }
+  // Подложка должна растягиваться на весь размер поля (а не на 1 клетку)
+  applyBoardBackgroundToDom(state);
 
   for (let y = 0; y < boardHeight; y++) {
     for (let x = 0; x < boardWidth; x++) {
@@ -1531,7 +1548,7 @@ function createInitialGameState() {
   return {
     boardWidth: 20,
     boardHeight: 20,
-    boardBg: null,
+    boardBgDataUrl: null,
     phase: "lobby",
     players: [],
     walls: [],
@@ -1943,20 +1960,6 @@ async function sendMessage(msg) {
           logEventToState(next, "Поле изменено");
         }
 
-        else if (type === "setBoardBg") {
-          if (!isGM) return;
-          const dataUrl = String(msg.dataUrl || "");
-          if (!dataUrl) return;
-          next.boardBg = dataUrl;
-          logEventToState(next, "GM установил подложку карты");
-        }
-
-        else if (type === "clearBoardBg") {
-          if (!isGM) return;
-          next.boardBg = null;
-          logEventToState(next, "GM убрал подложку карты");
-        }
-
         else if (type === "startInitiative") {
           if (!isGM) return;
           next.phase = "initiative";
@@ -2126,6 +2129,19 @@ else if (type === "addWall") {
           if (!w) return;
           next.walls = (next.walls || []).filter(x => !(x.x === w.x && x.y === w.y));
           logEventToState(next, `Стена удалена (${w.x},${w.y})`);
+        }
+
+        else if (type === "setBoardBg") {
+          if (!isGM) return;
+          const dataUrl = String(msg.dataUrl || "").trim();
+          next.boardBgDataUrl = dataUrl ? dataUrl : null;
+          logEventToState(next, next.boardBgDataUrl ? "Подложка карты загружена" : "Подложка карты очищена");
+        }
+
+        else if (type === "clearBoardBg") {
+          if (!isGM) return;
+          next.boardBgDataUrl = null;
+          logEventToState(next, "Подложка карты очищена");
         }
 
         else if (type === "rollInitiative") {
