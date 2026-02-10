@@ -30,6 +30,7 @@ const myScenarioSpan = document.getElementById('myScenario');
 const diceViz = document.getElementById('dice-viz');
 
 const board = document.getElementById('game-board');
+const boardBgEl = document.getElementById('board-bg');
 const boardWrapper = document.getElementById('board-wrapper');
 const playerList = document.getElementById('player-list');
 const logList = document.getElementById('log-list');
@@ -66,6 +67,10 @@ const startExplorationBtn = document.getElementById("start-exploration");
 
 const worldPhasesBox = document.getElementById('world-phases');
 const envEditorBox = document.getElementById('env-editor');
+
+// Подложка карты (GM)
+const boardBgFileInput = document.getElementById('board-bg-file');
+const boardBgClearBtn = document.getElementById('board-bg-clear');
 
 // ================== VARIABLES ==================
 // Supabase replaces our old Node/WebSocket server.
@@ -139,7 +144,8 @@ function applyRoleToUI() {
   const gmOnlyIds = [
     'clear-board','reset-game',
     'start-exploration','start-initiative','start-combat',
-    'edit-environment','add-wall','remove-wall'
+    'edit-environment','add-wall','remove-wall',
+    'board-bg-file','board-bg-clear'
   ];
   gmOnlyIds.forEach((id) => {
     const el = document.getElementById(id);
@@ -237,10 +243,6 @@ let finishInitiativeSent = false;
 
 // users map (ownerId -> {name, role})
 const usersById = new Map();
-
-// стабильный порядок пользователей в комнате (чтобы не "прыгали" при обновлениях)
-const userJoinOrder = new Map(); // userId -> number
-let userJoinSeq = 1;
 
 // стартово прячем панель бросков до входа в комнату
 if (diceViz) diceViz.style.display = 'none';
@@ -590,31 +592,7 @@ function updatePlayerList() {
     grouped[p.ownerId].players.push(p);
   });
 
-  const ownerIds = Object.keys(grouped);
-  ownerIds.sort((a, b) => {
-    const ua = usersById.get(a);
-    const ub = usersById.get(b);
-    const ra = normalizeRoleForUi(ua?.role);
-    const rb = normalizeRoleForUi(ub?.role);
-
-    // GM всегда сверху
-    const aGm = ra === "GM";
-    const bGm = rb === "GM";
-    if (aGm !== bGm) return aGm ? -1 : 1;
-
-    // далее — по порядку присоединения
-    const oa = userJoinOrder.get(a) ?? 1e9;
-    const ob = userJoinOrder.get(b) ?? 1e9;
-    if (oa !== ob) return oa - ob;
-
-    // запасной вариант — по имени
-    const na = String(ua?.name || grouped[a]?.ownerName || "");
-    const nb = String(ub?.name || grouped[b]?.ownerName || "");
-    return na.localeCompare(nb, "ru");
-  });
-
-  ownerIds.forEach((ownerId) => {
-    const group = grouped[ownerId];
+  Object.entries(grouped).forEach(([ownerId, group]) => {
     const userInfo = ownerId ? usersById.get(ownerId) : null;
 
     const ownerLi = document.createElement('li');
@@ -789,6 +767,9 @@ function updatePlayerList() {
 
 // ================== BOARD ==================
 function renderBoard(state) {
+  // Подложка карты под сеткой
+  try { setLocalBoardBackgroundFromState(state); } catch {}
+
   board.querySelectorAll('.cell').forEach(c => c.remove());
   board.style.position = 'relative';
   board.style.width = `${boardWidth * 50}px`;
@@ -1497,6 +1478,68 @@ clearBoardBtn.addEventListener('click', () => {
 });
 
 /*
+// ================== BOARD BACKGROUND (GM) ==================
+*/
+
+function setLocalBoardBackgroundFromState(state) {
+  if (!board) return;
+  let bgEl = boardBgEl;
+  if (!bgEl) {
+    bgEl = document.getElementById('board-bg');
+  }
+  if (!bgEl) {
+    bgEl = document.createElement('div');
+    bgEl.id = 'board-bg';
+    bgEl.setAttribute('aria-hidden', 'true');
+    board.prepend(bgEl);
+  }
+  const url = state?.boardBackground?.dataUrl;
+  if (typeof url === "string" && url.trim()) {
+    bgEl.style.backgroundImage = `url(${url})`;
+    board.classList.add('has-bg');
+  } else {
+    bgEl.style.backgroundImage = '';
+    board.classList.remove('has-bg');
+  }
+}
+
+boardBgFileInput?.addEventListener('change', () => {
+  if (!isGM()) return;
+  const file = boardBgFileInput.files?.[0];
+  if (!file) return;
+
+  // Защита от слишком тяжёлых файлов (DataURL сохраняется в DB)
+  const maxBytes = 2_500_000; // ~2.5MB
+  if (file.size > maxBytes) {
+    alert("Файл слишком большой. Попробуйте картинку меньшего размера (до ~2.5MB).\nСовет: уменьшите разрешение или сожмите изображение.");
+    boardBgFileInput.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = String(reader.result || '');
+    if (!dataUrl.startsWith('data:')) {
+      alert('Не удалось прочитать изображение');
+      boardBgFileInput.value = '';
+      return;
+    }
+    sendMessage({ type: 'setBoardBackground', dataUrl });
+    boardBgFileInput.value = '';
+  };
+  reader.onerror = () => {
+    alert('Ошибка чтения файла');
+    boardBgFileInput.value = '';
+  };
+  reader.readAsDataURL(file);
+});
+
+boardBgClearBtn?.addEventListener('click', () => {
+  if (!isGM()) return;
+  sendMessage({ type: 'setBoardBackground', dataUrl: null });
+});
+
+/*
 // ================== HELPER ==================
 */
 
@@ -1509,6 +1552,7 @@ function createInitialGameState() {
   return {
     boardWidth: 20,
     boardHeight: 20,
+    boardBackground: null,
     phase: "lobby",
     players: [],
     walls: [],
@@ -1659,10 +1703,6 @@ async function refreshRoomMembers(roomId) {
   (data || []).forEach((m) => {
     const uid = String(m.user_id || "");
     if (!uid) return;
-
-    // фиксируем порядок первого появления в комнате
-    if (!userJoinOrder.has(uid)) userJoinOrder.set(uid, userJoinSeq++);
-
     usersById.set(uid, {
       name: m.name || "Unknown",
       role: normalizeRoleForUi(m.role)
@@ -1799,36 +1839,13 @@ async function sendMessage(msg) {
       // ===== Dice live events =====
       case "diceEvent": {
         if (!currentRoomId || !roomChannel) return;
-
-        // гарантируем, что у события есть автор (чтобы у других всегда было "кто-что кидает")
-        const ev = (msg.event && typeof msg.event === "object") ? { ...msg.event } : null;
-        if (!ev) return;
-        if (!ev.fromId) ev.fromId = myId;
-        if (!ev.fromName) ev.fromName = safeGetUserName();
-
         await roomChannel.send({
           type: "broadcast",
           event: "diceEvent",
-          payload: { event: ev }
+          payload: { event: msg.event }
         });
         // also apply to self instantly
-        handleMessage({ type: "diceEvent", event: ev });
-        break;
-      }
-
-      // ===== Log ("журнал действий") =====
-      case "log": {
-        if (!currentRoomId) return;
-        const text = String(msg.text || "").trim();
-        if (!text) return;
-
-        // пишем лог в room_state, чтобы видели все и он сохранялся
-        const nextState = (lastState ? structuredClone(lastState) : createInitialGameState());
-        logEventToState(nextState, text);
-        await upsertRoomState(currentRoomId, nextState);
-
-        // мгновенный UI
-        handleMessage({ type: "state", state: nextState });
+        if (msg.event) handleMessage({ type: "diceEvent", event: msg.event });
         break;
       }
 
@@ -1945,6 +1962,18 @@ async function sendMessage(msg) {
           next.boardWidth = msg.width;
           next.boardHeight = msg.height;
           logEventToState(next, "Поле изменено");
+        }
+
+        else if (type === "setBoardBackground") {
+          if (!isGM) return;
+          const dataUrl = msg.dataUrl;
+          if (typeof dataUrl === "string" && dataUrl.trim()) {
+            next.boardBackground = { dataUrl };
+            logEventToState(next, "GM установил подложку карты");
+          } else {
+            next.boardBackground = null;
+            logEventToState(next, "GM убрал подложку карты");
+          }
         }
 
         else if (type === "startInitiative") {
