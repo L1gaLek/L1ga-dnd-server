@@ -152,6 +152,11 @@
       if (removeWallBtn) removeWallBtn.disabled = !(gm && editEnvironment);
       if (clearBoardBtn) clearBoardBtn.disabled = !gm;
       if (resetGameBtn) resetGameBtn.disabled = !gm;
+
+      // UI: подсветка режимов
+      if (editEnvBtn) editEnvBtn.classList.toggle('is-on', !!editEnvironment);
+      if (addWallBtn) addWallBtn.classList.toggle('is-active', !!editEnvironment && wallMode === 'add');
+      if (removeWallBtn) removeWallBtn.classList.toggle('is-active', !!editEnvironment && wallMode === 'remove');
     }
 
     editEnvBtn?.addEventListener('click', () => {
@@ -165,8 +170,16 @@
       setEnvButtons();
     });
 
-    addWallBtn?.addEventListener('click', () => { if (ctx.isGM?.()) wallMode = 'add'; });
-    removeWallBtn?.addEventListener('click', () => { if (ctx.isGM?.()) wallMode = 'remove'; });
+    addWallBtn?.addEventListener('click', () => {
+      if (!ctx.isGM?.()) return;
+      wallMode = 'add';
+      setEnvButtons();
+    });
+    removeWallBtn?.addEventListener('click', () => {
+      if (!ctx.isGM?.()) return;
+      wallMode = 'remove';
+      setEnvButtons();
+    });
 
     clearBoardBtn?.addEventListener('click', () => {
       if (!ctx.isGM?.()) return;
