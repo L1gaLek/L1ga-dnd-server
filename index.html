@@ -166,7 +166,6 @@
 
           <div id="board-wrapper">
             <div id="game-board">
-              <!-- Подложка под карту (GM может загрузить картинку/.gif) -->
               <div id="board-bg" aria-hidden="true"></div>
             </div>
           </div>
@@ -193,12 +192,13 @@
             <button id="add-wall" disabled>Добавить стену</button>
             <button id="remove-wall" disabled>Удалить стену</button>
 
-            <div class="side-sep"></div>
-            <div class="side-subtitle">Подложка карты (картинка / .gif)</div>
-            <input id="board-bg-file" type="file" accept="image/*,.gif">
-            <button id="board-bg-clear" type="button">Убрать подложку</button>
+            <div class="env-divider"></div>
 
-            <div class="side-hint">Картинка растягивается под размеры поля (ГМ).</div>
+            <div class="env-bg-controls">
+              <div class="env-bg-title">Подложка карты</div>
+              <input id="board-bg-file" type="file" accept="image/*" />
+              <button id="board-bg-clear" type="button">Убрать подложку</button>
+            </div>
 
             <button id="clear-board">Очистить поле</button>
             <button id="reset-game">Сбросить игру полностью</button>
