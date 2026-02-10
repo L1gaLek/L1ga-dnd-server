@@ -339,6 +339,9 @@ let finishInitiativeSent = false;
 
 // users map (ownerId -> {name, role})
 const usersById = new Map();
+// стабильный порядок пользователей (по времени подключения).
+// нужен, чтобы список "Пользователи и персонажи" не "прыгал" при обновлениях presence/DB.
+let usersOrder = []; // array of userId
 
 // стартово прячем панель бросков до входа в комнату
 if (diceViz) diceViz.style.display = 'none';
@@ -457,8 +460,25 @@ loginDiv.style.display = 'none';
     }
 
     if (msg.type === "users" && Array.isArray(msg.users)) {
-      usersById.clear();
-      msg.users.forEach(u => usersById.set(u.id, { name: u.name, role: u.role }));
+      // Не пересоздаём Map целиком, чтобы не ломать порядок пользователей.
+      // Порядок фиксируем по первому появлению пользователя.
+      const incoming = new Set();
+      msg.users.forEach((u) => {
+        if (!u || !u.id) return;
+        const uid = String(u.id);
+        incoming.add(uid);
+
+        if (!usersById.has(uid)) {
+          usersOrder.push(uid);
+        }
+        usersById.set(uid, { name: u.name, role: u.role });
+      });
+
+      // удаляем тех, кто вышел (и из Map, и из порядка)
+      usersOrder = usersOrder.filter((id) => incoming.has(String(id)));
+      Array.from(usersById.keys()).forEach((id) => {
+        if (!incoming.has(String(id))) usersById.delete(id);
+      });
       updatePlayerList();
     }
 
@@ -674,27 +694,39 @@ function updatePlayerList() {
     ? lastState.turnOrder[lastState.currentTurnIndex]
     : null;
 
+  // Стабильный порядок пользователей: GM всегда сверху, остальные — по времени подключения.
+  const gmIds = [];
+  const otherIds = [];
+  (usersOrder || []).forEach((ownerId) => {
+    const u = usersById.get(String(ownerId));
+    const isGm = normalizeRoleForUi(u?.role) === 'GM';
+    (isGm ? gmIds : otherIds).push(String(ownerId));
+  });
+  const orderedOwnerIds = [...gmIds, ...otherIds];
+
+  // Группируем в Map, чтобы порядок не "прыгал"
+  const grouped = new Map(); // ownerId -> { ownerName, players: [] }
+
   // Сначала создаём группы по пользователям (даже если у них ещё нет персонажей)
-  const grouped = {};
-  usersById.forEach((u, ownerId) => {
-    grouped[ownerId] = {
+  orderedOwnerIds.forEach((ownerId) => {
+    const u = usersById.get(String(ownerId));
+    grouped.set(String(ownerId), {
       ownerName: (u && u.name) ? u.name : 'Unknown',
       players: []
-    };
+    });
   });
 
   // Добавляем персонажей в соответствующие группы
-  players.forEach(p => {
-    if (!grouped[p.ownerId]) {
-      grouped[p.ownerId] = {
-        ownerName: p.ownerName || 'Unknown',
-        players: []
-      };
+  players.forEach((p) => {
+    const oid = String(p.ownerId || '');
+    if (!grouped.has(oid)) {
+      // на случай старых данных/неизвестного владельца — добавляем в конец
+      grouped.set(oid, { ownerName: p.ownerName || 'Unknown', players: [] });
     }
-    grouped[p.ownerId].players.push(p);
+    grouped.get(oid).players.push(p);
   });
 
-  Object.entries(grouped).forEach(([ownerId, group]) => {
+  Array.from(grouped.entries()).forEach(([ownerId, group]) => {
     const userInfo = ownerId ? usersById.get(ownerId) : null;
 
     const ownerLi = document.createElement('li');
