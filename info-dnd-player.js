@@ -2850,20 +2850,28 @@ async function fetchSpellHtml(url) {
     }
   }
 
-  // 1) пробуем локальный прокси (если проект запущен с backend)
-  try {
-    const r = await fetch(`/api/fetch?url=${encodeURIComponent(url)}`);
-    if (r.ok) return await r.text();
-  } catch {
-    // ignore
+  const host = (typeof location !== "undefined" && location.hostname) ? String(location.hostname) : "";
+  const isGithubPages = /(^|\.)github\.io$/i.test(host);
+
+  // 1) пробуем локальный прокси (/api/fetch) ТОЛЬКО если это не GitHub Pages
+  //    (на GitHub Pages это всегда 404 и только засоряет консоль)
+  if (!isGithubPages) {
+    try {
+      const r = await fetch(`/api/fetch?url=${encodeURIComponent(url)}`);
+      if (r.ok) return await r.text();
+    } catch {
+      // ignore
+    }
   }
 
-  // 2) пробуем напрямую (вдруг dnd.su разрешит CORS / локальная среда)
-  try {
-    const r = await fetch(url, { method: "GET" });
-    if (r.ok) return await r.text();
-  } catch {
-    // ignore
+  // 2) пробуем напрямую только НЕ на GitHub Pages (иначе гарантированный CORS на dnd.su)
+  if (!isGithubPages) {
+    try {
+      const r = await fetch(url, { method: "GET" });
+      if (r.ok) return await r.text();
+    } catch {
+      // ignore
+    }
   }
 
   // 3) последний шанс: публичный read-only прокси
