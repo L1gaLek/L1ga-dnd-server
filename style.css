@@ -316,6 +316,29 @@ button:hover {
   margin: 0 0 8px 0;
 }
 
+
+/* Карты кампании (в блоке "Редактирования окружения") */
+.campaign-maps-controls {
+  margin: 6px 0 10px 0;
+  padding: 8px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #101010;
+}
+.campaign-maps-title {
+  font-size: 12px;
+  color: #ddd;
+  margin-bottom: 6px;
+}
+.campaign-maps-controls select {
+  width: 100%;
+  margin: 0 0 8px 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #0f0f0f;
+  border: 1px solid #333;
+  color: #fff;
+}
 /* Подсветки фаз (используем классы на конкретных кнопках) */
 #start-exploration.active {
   background-color: #2d6cdf;
