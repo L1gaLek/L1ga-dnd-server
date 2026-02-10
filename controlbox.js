@@ -88,14 +88,13 @@
     function refreshGmInputsFromState() {
       const st = ctx.getState?.();
       if (!st) return;
-      if (gmWInput) gmWInput.value = String(st.boardWidth ?? 20);
-      if (gmHInput) gmHInput.value = String(st.boardHeight ?? 20);
+      if (gmWInput) gmWInput.value = String(st.boardWidth ?? 10);
+      if (gmHInput) gmHInput.value = String(st.boardHeight ?? 10);
     }
 
     // эти инпуты видны только GM (в client.js applyRoleToUI), но логика тут
     applyGmBtn?.addEventListener('click', () => {
       if (!ctx.isGM?.()) return;
-      // Минимальный размер карты: 5x5
       const w = clamp(Number(gmWInput?.value) || 10, 5, 150);
       const h = clamp(Number(gmHInput?.value) || 10, 5, 150);
       if (gmWInput) gmWInput.value = String(w);
