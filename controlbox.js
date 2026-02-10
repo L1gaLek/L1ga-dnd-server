@@ -88,15 +88,15 @@
     function refreshGmInputsFromState() {
       const st = ctx.getState?.();
       if (!st) return;
-      if (gmWInput) gmWInput.value = String(st.boardWidth ?? 10);
-      if (gmHInput) gmHInput.value = String(st.boardHeight ?? 10);
+      if (gmWInput) gmWInput.value = String(st.boardWidth ?? 20);
+      if (gmHInput) gmHInput.value = String(st.boardHeight ?? 20);
     }
 
     // эти инпуты видны только GM (в client.js applyRoleToUI), но логика тут
     applyGmBtn?.addEventListener('click', () => {
       if (!ctx.isGM?.()) return;
-      const w = clamp(Number(gmWInput?.value) || 10, 5, 150);
-      const h = clamp(Number(gmHInput?.value) || 10, 5, 150);
+      const w = clamp(Number(gmWInput?.value) || 20, 20, 150);
+      const h = clamp(Number(gmHInput?.value) || 20, 20, 150);
       if (gmWInput) gmWInput.value = String(w);
       if (gmHInput) gmHInput.value = String(h);
       ctx.sendMessage?.({ type: 'resizeBoard', width: w, height: h });
@@ -231,14 +231,16 @@
       dragTouched = new Set();
     });
 
-    // ===== Campaign maps: Parameters modal (GM) =====
+    // ===== Campaign maps / sections (GM): Parameters modal =====
     const campaignParamsBtn = document.getElementById('campaign-params');
+    const activeMapNameSpan = document.getElementById('campaign-active-map-name');
+
     let cmpOverlay = null;
     let cmpOpen = false;
     let lastCampaignState = null;
 
     function escapeHtml(s) {
-      return String(s ?? '').replace(/[&<>"]/g, (c) => ({
+      return String(s ?? '').replace(/[&<>\"]/g, (c) => ({
         '&': '&amp;',
         '<': '&lt;',
         '>': '&gt;',
@@ -248,15 +250,17 @@
 
     function ensureCmpOverlay() {
       if (cmpOverlay) return cmpOverlay;
+
       const overlay = document.createElement('div');
       overlay.className = 'cmp-overlay hidden';
       overlay.setAttribute('aria-hidden', 'true');
       overlay.innerHTML = `
         <div class="cmp-modal" role="dialog" aria-modal="true">
           <div class="cmp-modal-header">
-            <div class="cmp-modal-title">Параметры кампании</div>
+            <div class="cmp-modal-title">Параметры</div>
             <button class="cmp-modal-close" type="button" title="Закрыть">✕</button>
           </div>
+
           <div class="cmp-modal-body">
             <div class="cmp-toolbar">
               <button type="button" class="cmp-btn" data-cmp-create-section>Создать раздел</button>
@@ -264,6 +268,23 @@
               <div style="flex:1"></div>
               <button type="button" class="cmp-btn" data-cmp-refresh>Обновить</button>
             </div>
+
+            <div class="cmp-dialog hidden" data-cmp-dialog="create-map">
+              <div class="cmp-dialog-title">Создать карту</div>
+              <div class="cmp-dialog-row">
+                <label>Раздел</label>
+                <select data-cmp-create-map-section></select>
+              </div>
+              <div class="cmp-dialog-row">
+                <label>Название</label>
+                <input type="text" data-cmp-create-map-name />
+              </div>
+              <div class="cmp-dialog-actions">
+                <button type="button" data-cmp-create-map-cancel>Отмена</button>
+                <button type="button" data-cmp-create-map-ok>Создать</button>
+              </div>
+            </div>
+
             <div class="cmp-sections" data-cmp-sections></div>
           </div>
         </div>
@@ -275,8 +296,25 @@
       overlay.querySelector('.cmp-modal-close')?.addEventListener('click', closeCmp);
       overlay.querySelector('[data-cmp-refresh]')?.addEventListener('click', () => renderCampaignParams(lastCampaignState || ctx.getState?.() || null));
 
-      overlay.addEventListener('click', async (e) => {
-        const t = e.target;
+      // dialogs
+      overlay.querySelector('[data-cmp-create-map-cancel]')?.addEventListener('click', () => setDialogVisible('create-map', false));
+      overlay.querySelector('[data-cmp-create-map-ok]')?.addEventListener('click', () => {
+        if (!ctx.isGM?.()) return;
+        const st = lastCampaignState || ctx.getState?.() || null;
+        const secSel = overlay.querySelector('[data-cmp-create-map-section]');
+        const nameInp = overlay.querySelector('[data-cmp-create-map-name]');
+        const sectionId = String(secSel?.value || '').trim();
+        const name = String(nameInp?.value || '').trim();
+        if (!sectionId) return alert('Выберите раздел');
+        if (!name) return alert('Введите название карты');
+        ctx.sendMessage?.({ type: 'createCampaignMap', sectionId, name });
+        setDialogVisible('create-map', false);
+        // обновим через приход нового state
+      });
+
+      // main event delegation
+      overlay.addEventListener('click', (e) => {
+        const t = (e.target instanceof Element) ? e.target : (e.target && e.target.parentElement);
         if (t?.closest?.('[data-cmp-create-section]')) {
           if (!ctx.isGM?.()) return;
           const st = lastCampaignState || ctx.getState?.() || null;
@@ -288,10 +326,10 @@
           ctx.sendMessage?.({ type: 'createMapSection', name: clean });
           return;
         }
+
         if (t?.closest?.('[data-cmp-create-map]')) {
           if (!ctx.isGM?.()) return;
-          const st = lastCampaignState || ctx.getState?.() || null;
-          openCreateMapFlow(st);
+          openCreateMapDialog(lastCampaignState || ctx.getState?.() || null);
           return;
         }
 
@@ -304,14 +342,92 @@
           return;
         }
 
-        const delBtn = t?.closest?.('[data-cmp-delete-map]');
-        if (delBtn) {
+        const delMapBtn = t?.closest?.('[data-cmp-delete-map]');
+        if (delMapBtn) {
           if (!ctx.isGM?.()) return;
-          const mapId = String(delBtn.getAttribute('data-cmp-delete-map') || '').trim();
-          const mapName = String(delBtn.getAttribute('data-cmp-delete-name') || '').trim();
+          const mapId = String(delMapBtn.getAttribute('data-cmp-delete-map') || '').trim();
+          const mapName = String(delMapBtn.getAttribute('data-cmp-delete-name') || '').trim();
           if (!mapId) return;
           if (!confirm(`Удалить карту "${mapName || 'Без названия'}"?`)) return;
           ctx.sendMessage?.({ type: 'deleteCampaignMap', mapId });
+          return;
+        }
+
+        const renMapBtn = t?.closest?.('[data-cmp-rename-map]');
+        if (renMapBtn) {
+          if (!ctx.isGM?.()) return;
+          const mapId = String(renMapBtn.getAttribute('data-cmp-rename-map') || '').trim();
+          const curName = String(renMapBtn.getAttribute('data-cmp-rename-name') || '').trim();
+          if (!mapId) return;
+          const name = prompt('Новое название карты:', curName || 'Карта');
+          if (name === null) return;
+          const clean = String(name).trim();
+          if (!clean) return;
+          ctx.sendMessage?.({ type: 'renameCampaignMap', mapId, name: clean });
+          return;
+        }
+
+        const moveMapBtn = t?.closest?.('[data-cmp-move-map]');
+        if (moveMapBtn) {
+          if (!ctx.isGM?.()) return;
+          const mapId = String(moveMapBtn.getAttribute('data-cmp-move-map') || '').trim();
+          const row = moveMapBtn.closest('.cmp-map-row');
+          const sel = row?.querySelector?.('select[data-cmp-move-target]');
+          const toSectionId = String(sel?.value || '').trim();
+          if (!mapId || !toSectionId) return;
+          ctx.sendMessage?.({ type: 'moveCampaignMap', mapId, toSectionId });
+          return;
+        }
+
+        const renSecBtn = t?.closest?.('[data-cmp-rename-section]');
+        if (renSecBtn) {
+          if (!ctx.isGM?.()) return;
+          const sectionId = String(renSecBtn.getAttribute('data-cmp-rename-section') || '').trim();
+          const curName = String(renSecBtn.getAttribute('data-cmp-rename-name') || '').trim();
+          if (!sectionId) return;
+          const name = prompt('Новое название раздела:', curName || 'Раздел');
+          if (name === null) return;
+          const clean = String(name).trim();
+          if (!clean) return;
+          ctx.sendMessage?.({ type: 'renameMapSection', sectionId, name: clean });
+          return;
+        }
+
+        const delSecBtn = t?.closest?.('[data-cmp-delete-section]');
+        if (delSecBtn) {
+          if (!ctx.isGM?.()) return;
+          const sectionId = String(delSecBtn.getAttribute('data-cmp-delete-section') || '').trim();
+          const secName = String(delSecBtn.getAttribute('data-cmp-delete-name') || '').trim();
+          if (!sectionId) return;
+          const st = lastCampaignState || ctx.getState?.() || null;
+          const mapsIn = (Array.isArray(st?.maps) ? st.maps : []).filter(m => String(m?.sectionId || '') === sectionId);
+          const sections = Array.isArray(st?.mapSections) ? st.mapSections : [];
+          if (sections.length <= 1) {
+            alert('Нельзя удалить последний раздел.');
+            return;
+          }
+
+          if (!mapsIn.length) {
+            if (!confirm(`Удалить раздел "${secName || 'Раздел'}"?`)) return;
+            ctx.sendMessage?.({ type: 'deleteMapSection', sectionId, mode: 'delete' });
+            return;
+          }
+
+          // если есть карты — спросим, переносить ли
+          const move = confirm(`В разделе "${secName || 'Раздел'}" есть карты (${mapsIn.length}).\n\nOK — перенести карты в другой раздел и удалить раздел.\nОтмена — удалить раздел вместе с картами.`);
+          if (move) {
+            const other = sections.filter(s => String(s?.id) !== sectionId);
+            const list = other.map((s, i) => `${i + 1}) ${s.name}`).join('\n');
+            const pick = prompt(`Куда перенести карты?\n${list}`, '1');
+            if (pick === null) return;
+            const idx = Math.max(1, Math.min(other.length, Number(pick) || 1)) - 1;
+            const targetSectionId = String(other[idx]?.id || '').trim();
+            if (!targetSectionId) return;
+            ctx.sendMessage?.({ type: 'deleteMapSection', sectionId, mode: 'move', targetSectionId });
+          } else {
+            if (!confirm(`Точно удалить раздел "${secName || 'Раздел'}" вместе со всеми картами?`)) return;
+            ctx.sendMessage?.({ type: 'deleteMapSection', sectionId, mode: 'delete' });
+          }
           return;
         }
       });
@@ -319,6 +435,13 @@
       document.body.appendChild(overlay);
       cmpOverlay = overlay;
       return overlay;
+    }
+
+    function setDialogVisible(which, visible) {
+      const overlay = ensureCmpOverlay();
+      const dlg = overlay.querySelector(`.cmp-dialog[data-cmp-dialog="${which}"]`);
+      if (!dlg) return;
+      dlg.classList.toggle('hidden', !visible);
     }
 
     function openCmp() {
@@ -334,6 +457,7 @@
       cmpOpen = false;
       cmpOverlay.classList.add('hidden');
       cmpOverlay.setAttribute('aria-hidden', 'true');
+      setDialogVisible('create-map', false);
     }
 
     function getNextDefaultSectionName(st) {
@@ -348,27 +472,26 @@
       const maps = Array.isArray(st?.maps) ? st.maps : [];
       const names = new Set(maps.map(m => String(m?.name || '').trim()).filter(Boolean));
       let i = maps.length + 1;
-      while (names.has(`Карта ${i}`)) i++;
-      return `Карта ${i}`;
+      while (names.has(`Карта ${i}`) || names.has(`Карта ${i}`)) i++;
+      // для совместимости используем без пробела (как пользователь просил ранее)
+      return `Карта${i}`;
     }
 
-    function openCreateMapFlow(st) {
+    function openCreateMapDialog(st) {
+      const overlay = ensureCmpOverlay();
       const sections = Array.isArray(st?.mapSections) ? st.mapSections : [];
       if (!sections.length) {
         alert('Сначала создайте раздел.');
         return;
       }
-      const list = sections.map((s, idx) => `${idx + 1}) ${s.name}`).join('\n');
-      const pick = prompt(`Выберите раздел (номер):\n${list}`, '1');
-      if (pick === null) return;
-      const idx = Math.max(1, Math.min(sections.length, Number(pick) || 1)) - 1;
-      const sec = sections[idx];
-      const defName = getNextDefaultMapName(st);
-      const name = prompt('Название карты:', defName);
-      if (name === null) return;
-      const clean = String(name).trim();
-      if (!clean) return;
-      ctx.sendMessage?.({ type: 'createCampaignMap', sectionId: sec.id, name: clean });
+      const sel = overlay.querySelector('[data-cmp-create-map-section]');
+      const inp = overlay.querySelector('[data-cmp-create-map-name]');
+      if (sel) {
+        sel.innerHTML = sections.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+      }
+      if (inp) inp.value = getNextDefaultMapName(st);
+      setDialogVisible('create-map', true);
+      try { inp?.focus?.(); inp?.select?.(); } catch {}
     }
 
     function renderCampaignParams(st) {
@@ -381,8 +504,14 @@
       const maps = Array.isArray(st?.maps) ? st.maps : [];
       const curId = String(st?.currentMapId || '');
 
+      // подпись активной карты справа
+      try {
+        const active = maps.find(m => String(m?.id) === curId) || maps[0] || null;
+        if (activeMapNameSpan) activeMapNameSpan.textContent = active?.name || '—';
+      } catch {}
+
       if (!sections.length) {
-        sectionsEl.innerHTML = `<div style="opacity:.8">Разделов пока нет. Нажмите «Создать раздел».</div>`;
+        sectionsEl.innerHTML = `<div class="cmp-empty">Разделов пока нет. Нажмите «Создать раздел».</div>`;
         return;
       }
 
@@ -393,6 +522,8 @@
         if (!bySec.has(sid)) bySec.set(sid, []);
         bySec.get(sid).push(m);
       });
+
+      const sectionOptions = sections.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
 
       sectionsEl.innerHTML = sections.map(s => {
         const sid = String(s.id);
@@ -410,21 +541,36 @@
               </div>
               <div class="cmp-map-actions">
                 <button type="button" data-cmp-select-map="${escapeHtml(mid)}">Выбрать</button>
+                <button type="button" data-cmp-rename-map="${escapeHtml(mid)}" data-cmp-rename-name="${escapeHtml(m?.name || '')}">Переименовать</button>
                 <button type="button" data-cmp-delete-map="${escapeHtml(mid)}" data-cmp-delete-name="${escapeHtml(m?.name || '')}">Удалить</button>
+                <div class="cmp-move">
+                  <select data-cmp-move-target>
+                    ${sections.map(sec => `<option value="${escapeHtml(sec.id)}" ${String(sec.id) === String(m?.sectionId) ? 'selected' : ''}>${escapeHtml(sec.name)}</option>`).join('')}
+                  </select>
+                  <button type="button" data-cmp-move-map="${escapeHtml(mid)}">Перенести</button>
+                </div>
               </div>
             </div>
           `;
-        }).join('') : `<div style="opacity:.7">В этом разделе пока нет карт.</div>`;
+        }).join('') : `<div class="cmp-empty">В этом разделе пока нет карт.</div>`;
 
         return `
           <div class="cmp-section">
             <div class="cmp-section-head">
               <div class="cmp-section-name">${escapeHtml(s?.name || 'Раздел')}</div>
+              <div class="cmp-section-actions">
+                <button type="button" title="Переименовать" data-cmp-rename-section="${escapeHtml(sid)}" data-cmp-rename-name="${escapeHtml(s?.name || '')}">✎</button>
+                <button type="button" title="Удалить раздел" data-cmp-delete-section="${escapeHtml(sid)}" data-cmp-delete-name="${escapeHtml(s?.name || '')}">🗑</button>
+              </div>
             </div>
             <div class="cmp-maps">${mapsHtml}</div>
           </div>
         `;
       }).join('');
+
+      // refresh create-map section list
+      const sel = overlay.querySelector('[data-cmp-create-map-section]');
+      if (sel) sel.innerHTML = sectionOptions;
     }
 
     campaignParamsBtn?.addEventListener('click', () => {
@@ -441,14 +587,19 @@
       setViewport,
       refreshGmInputsFromState,
       getViewport: () => ({ cols: viewportCols, rows: viewportRows }),
-      getZoom: () => zoom,
-      openCampaignParams: () => {
-        if (!ctx.isGM?.()) return;
-        openCmp();
-      },
+      getZoom: () => zoom
+      ,
+      openCampaignParams: () => { if (ctx.isGM?.()) openCmp(); },
       updateCampaignParams: (st) => {
         lastCampaignState = st;
         if (cmpOpen) renderCampaignParams(st);
+        // даже если модалка закрыта — обновляем подпись активной карты
+        try {
+          const maps = Array.isArray(st?.maps) ? st.maps : [];
+          const curId = String(st?.currentMapId || '');
+          const active = maps.find(m => String(m?.id) === curId) || maps[0] || null;
+          if (activeMapNameSpan) activeMapNameSpan.textContent = active?.name || '—';
+        } catch {}
       }
     };
   };
