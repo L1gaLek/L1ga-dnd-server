@@ -30,7 +30,6 @@ const myScenarioSpan = document.getElementById('myScenario');
 const diceViz = document.getElementById('dice-viz');
 
 const board = document.getElementById('game-board');
-const boardBgEl = document.getElementById('board-bg');
 const boardWrapper = document.getElementById('board-wrapper');
 const playerList = document.getElementById('player-list');
 const logList = document.getElementById('log-list');
@@ -67,10 +66,6 @@ const startExplorationBtn = document.getElementById("start-exploration");
 
 const worldPhasesBox = document.getElementById('world-phases');
 const envEditorBox = document.getElementById('env-editor');
-
-// Подложка карты (GM)
-const boardBgFileInput = document.getElementById('board-bg-file');
-const boardBgClearBtn = document.getElementById('board-bg-clear');
 
 // ================== VARIABLES ==================
 // Supabase replaces our old Node/WebSocket server.
@@ -152,6 +147,41 @@ function applyRoleToUI() {
     if (el) el.disabled = !gm;
   });
 }
+
+// ================== MAP BACKGROUND (GM) ==================
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result || ""));
+    fr.onerror = () => reject(fr.error || new Error('FileReader error'));
+    fr.readAsDataURL(file);
+  });
+}
+
+boardBgFileInput?.addEventListener('change', async (e) => {
+  try {
+    if (!isGM()) return;
+    const file = e?.target?.files?.[0];
+    if (!file) return;
+    // мягкий лимит, чтобы не раздувать состояние комнаты
+    if (file.size > 8 * 1024 * 1024) {
+      alert('Файл слишком большой. Рекомендуется до 8 МБ.');
+      e.target.value = '';
+      return;
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    await sendMessage({ type: 'setBoardBg', dataUrl });
+    e.target.value = '';
+  } catch (err) {
+    console.error(err);
+    alert('Не удалось загрузить подложку');
+  }
+});
+
+boardBgClearBtn?.addEventListener('click', async () => {
+  if (!isGM()) return;
+  await sendMessage({ type: 'clearBoardBg' });
+});
 let currentRoomId = null;
 
 let heartbeatTimer = null;
@@ -767,9 +797,6 @@ function updatePlayerList() {
 
 // ================== BOARD ==================
 function renderBoard(state) {
-  // Подложка карты под сеткой
-  try { setLocalBoardBackgroundFromState(state); } catch {}
-
   board.querySelectorAll('.cell').forEach(c => c.remove());
   board.style.position = 'relative';
   board.style.width = `${boardWidth * 50}px`;
@@ -777,6 +804,20 @@ function renderBoard(state) {
   board.style.display = 'grid';
   board.style.gridTemplateColumns = `repeat(${boardWidth}, 50px)`;
   board.style.gridTemplateRows = `repeat(${boardHeight}, 50px)`;
+
+  // ===== Подложка карты (растягиваем под реальный размер карты ГМа) =====
+  if (boardBgEl) {
+    boardBgEl.style.width = `${boardWidth * 50}px`;
+    boardBgEl.style.height = `${boardHeight * 50}px`;
+    const bg = String(state?.boardBg || state?.board_bg || "");
+    if (bg) {
+      boardBgEl.style.backgroundImage = `url(${bg})`;
+      board.classList.add('has-bg');
+    } else {
+      boardBgEl.style.backgroundImage = '';
+      board.classList.remove('has-bg');
+    }
+  }
 
   for (let y = 0; y < boardHeight; y++) {
     for (let x = 0; x < boardWidth; x++) {
@@ -1478,68 +1519,6 @@ clearBoardBtn.addEventListener('click', () => {
 });
 
 /*
-// ================== BOARD BACKGROUND (GM) ==================
-*/
-
-function setLocalBoardBackgroundFromState(state) {
-  if (!board) return;
-  let bgEl = boardBgEl;
-  if (!bgEl) {
-    bgEl = document.getElementById('board-bg');
-  }
-  if (!bgEl) {
-    bgEl = document.createElement('div');
-    bgEl.id = 'board-bg';
-    bgEl.setAttribute('aria-hidden', 'true');
-    board.prepend(bgEl);
-  }
-  const url = state?.boardBackground?.dataUrl;
-  if (typeof url === "string" && url.trim()) {
-    bgEl.style.backgroundImage = `url(${url})`;
-    board.classList.add('has-bg');
-  } else {
-    bgEl.style.backgroundImage = '';
-    board.classList.remove('has-bg');
-  }
-}
-
-boardBgFileInput?.addEventListener('change', () => {
-  if (!isGM()) return;
-  const file = boardBgFileInput.files?.[0];
-  if (!file) return;
-
-  // Защита от слишком тяжёлых файлов (DataURL сохраняется в DB)
-  const maxBytes = 2_500_000; // ~2.5MB
-  if (file.size > maxBytes) {
-    alert("Файл слишком большой. Попробуйте картинку меньшего размера (до ~2.5MB).\nСовет: уменьшите разрешение или сожмите изображение.");
-    boardBgFileInput.value = '';
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    const dataUrl = String(reader.result || '');
-    if (!dataUrl.startsWith('data:')) {
-      alert('Не удалось прочитать изображение');
-      boardBgFileInput.value = '';
-      return;
-    }
-    sendMessage({ type: 'setBoardBackground', dataUrl });
-    boardBgFileInput.value = '';
-  };
-  reader.onerror = () => {
-    alert('Ошибка чтения файла');
-    boardBgFileInput.value = '';
-  };
-  reader.readAsDataURL(file);
-});
-
-boardBgClearBtn?.addEventListener('click', () => {
-  if (!isGM()) return;
-  sendMessage({ type: 'setBoardBackground', dataUrl: null });
-});
-
-/*
 // ================== HELPER ==================
 */
 
@@ -1552,7 +1531,7 @@ function createInitialGameState() {
   return {
     boardWidth: 20,
     boardHeight: 20,
-    boardBackground: null,
+    boardBg: null,
     phase: "lobby",
     players: [],
     walls: [],
@@ -1964,16 +1943,18 @@ async function sendMessage(msg) {
           logEventToState(next, "Поле изменено");
         }
 
-        else if (type === "setBoardBackground") {
+        else if (type === "setBoardBg") {
           if (!isGM) return;
-          const dataUrl = msg.dataUrl;
-          if (typeof dataUrl === "string" && dataUrl.trim()) {
-            next.boardBackground = { dataUrl };
-            logEventToState(next, "GM установил подложку карты");
-          } else {
-            next.boardBackground = null;
-            logEventToState(next, "GM убрал подложку карты");
-          }
+          const dataUrl = String(msg.dataUrl || "");
+          if (!dataUrl) return;
+          next.boardBg = dataUrl;
+          logEventToState(next, "GM установил подложку карты");
+        }
+
+        else if (type === "clearBoardBg") {
+          if (!isGM) return;
+          next.boardBg = null;
+          logEventToState(next, "GM убрал подложку карты");
         }
 
         else if (type === "startInitiative") {
