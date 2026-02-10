@@ -130,6 +130,8 @@
         <!-- Левая часть (ширина = ширина поля). Всё, что "над полем", центрируется относительно поля -->
         <div id="board-col">
 
+          <div id="board-topbar">
+
           <div id="current-turn">
             Текущий игрок: <span id="current-player">-</span>
             <button id="next-turn" class="next-turn-btn" type="button" title="Конец хода (по инициативе)">
@@ -137,39 +139,30 @@
             </button>
           </div>
 
-          <div id="board-settings" class="board-settings-wrap" aria-label="Настройки поля">
-
-            <!-- Персональный вид (рамка) -->
-            <div class="board-settings-box" aria-label="Размер вида">
-              <label class="board-setting">
-                <span class="board-setting-label">Ширина поля</span>
+          <div id="board-settings">
+            <div id="board-settings-viewport" class="board-settings-box">
+              <label>Ширина поля:
                 <input type="number" id="board-width" value="10" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
               </label>
-
-              <label class="board-setting">
-                <span class="board-setting-label">Высота поля</span>
+              <label>Высота поля:
                 <input type="number" id="board-height" value="10" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
               </label>
-
               <button id="create-board" type="button" title="Применить размер рамки (только для вас)">Применить вид</button>
             </div>
 
             <!-- Только для GM: реальный размер карты (количество клеток внутри поля) -->
-            <div id="board-settings-gm" class="board-settings-box" aria-label="Размер карты (ГМ)">
-              <label class="board-setting">
-                <span class="board-setting-label">Ширина поля (ГМ)</span>
+            <div id="board-settings-gm" class="board-settings-box" style="margin-top:8px;">
+              <label>Ширина поля (ГМ):
                 <input type="number" id="board-width-gm" value="10" min="5" max="150" title="Реальная ширина карты в клетках (5–150)">
               </label>
-
-              <label class="board-setting">
-                <span class="board-setting-label">Высота поля (ГМ)</span>
+              <label>Высота поля (ГМ):
                 <input type="number" id="board-height-gm" value="10" min="5" max="150" title="Реальная высота карты в клетках (5–150)">
               </label>
-
               <button id="create-board-gm" type="button" title="Изменить реальный размер карты (видно всем)">Применить карту</button>
             </div>
-
           </div>
+
+        </div>
 
           <div id="board-wrapper">
             <div id="game-board">
