@@ -368,6 +368,8 @@ joinBtn.addEventListener('click', () => {
 
 sbClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
+window.SUPABASE_FETCH_FN = "fetch";
+  
   // stable identity (doesn't depend on nickname)
   const savedUserId = localStorage.getItem("dnd_user_id") || "";
   const userId = savedUserId || ("xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
