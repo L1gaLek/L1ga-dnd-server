@@ -238,6 +238,10 @@ let finishInitiativeSent = false;
 // users map (ownerId -> {name, role})
 const usersById = new Map();
 
+// стабильный порядок пользователей в комнате (чтобы не "прыгали" при обновлениях)
+const userJoinOrder = new Map(); // userId -> number
+let userJoinSeq = 1;
+
 // стартово прячем панель бросков до входа в комнату
 if (diceViz) diceViz.style.display = 'none';
 
@@ -280,7 +284,6 @@ sbClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANO
 
 // ================== MESSAGE HANDLER (used by Supabase subscriptions) ==================
 function handleMessage(msg) {
-  if (!msg) return;
 
 // ===== Rooms lobby messages =====
 if (msg.type === 'rooms' && Array.isArray(msg.rooms)) {
@@ -587,7 +590,31 @@ function updatePlayerList() {
     grouped[p.ownerId].players.push(p);
   });
 
-  Object.entries(grouped).forEach(([ownerId, group]) => {
+  const ownerIds = Object.keys(grouped);
+  ownerIds.sort((a, b) => {
+    const ua = usersById.get(a);
+    const ub = usersById.get(b);
+    const ra = normalizeRoleForUi(ua?.role);
+    const rb = normalizeRoleForUi(ub?.role);
+
+    // GM всегда сверху
+    const aGm = ra === "GM";
+    const bGm = rb === "GM";
+    if (aGm !== bGm) return aGm ? -1 : 1;
+
+    // далее — по порядку присоединения
+    const oa = userJoinOrder.get(a) ?? 1e9;
+    const ob = userJoinOrder.get(b) ?? 1e9;
+    if (oa !== ob) return oa - ob;
+
+    // запасной вариант — по имени
+    const na = String(ua?.name || grouped[a]?.ownerName || "");
+    const nb = String(ub?.name || grouped[b]?.ownerName || "");
+    return na.localeCompare(nb, "ru");
+  });
+
+  ownerIds.forEach((ownerId) => {
+    const group = grouped[ownerId];
     const userInfo = ownerId ? usersById.get(ownerId) : null;
 
     const ownerLi = document.createElement('li');
@@ -913,7 +940,7 @@ let diceAnimFrame = null;
 let diceAnimBusy = false;
 
 // ===== Other players dice feed (right of dice panel) =====
-var othersDiceWrap = null;
+let othersDiceWrap = null;
 
 function ensureOthersDiceUI() {
   if (othersDiceWrap) return othersDiceWrap;
@@ -968,7 +995,8 @@ async function applyDiceEventToMain(ev) {
 }
 
 function pushOtherDiceEvent(ev) {
-  const wrap = ensureOthersDiceUI();
+  ensureOthersDiceUI();
+
   // не показываем свои же броски
   if (ev.fromId && typeof myId !== "undefined" && ev.fromId === myId) return;
 
@@ -1000,7 +1028,7 @@ function pushOtherDiceEvent(ev) {
   if (ev.crit === "crit-fail") item.classList.add("crit-fail");
   if (ev.crit === "crit-success") item.classList.add("crit-success");
 
-  wrap.appendChild(item);
+  othersDiceWrap.appendChild(item);
 
   // через 5с — плавное исчезновение
   setTimeout(() => item.classList.add("fade"), 4200);
@@ -1631,6 +1659,10 @@ async function refreshRoomMembers(roomId) {
   (data || []).forEach((m) => {
     const uid = String(m.user_id || "");
     if (!uid) return;
+
+    // фиксируем порядок первого появления в комнате
+    if (!userJoinOrder.has(uid)) userJoinOrder.set(uid, userJoinSeq++);
+
     usersById.set(uid, {
       name: m.name || "Unknown",
       role: normalizeRoleForUi(m.role)
@@ -1767,13 +1799,36 @@ async function sendMessage(msg) {
       // ===== Dice live events =====
       case "diceEvent": {
         if (!currentRoomId || !roomChannel) return;
+
+        // гарантируем, что у события есть автор (чтобы у других всегда было "кто-что кидает")
+        const ev = (msg.event && typeof msg.event === "object") ? { ...msg.event } : null;
+        if (!ev) return;
+        if (!ev.fromId) ev.fromId = myId;
+        if (!ev.fromName) ev.fromName = safeGetUserName();
+
         await roomChannel.send({
           type: "broadcast",
           event: "diceEvent",
-          payload: { event: msg.event }
+          payload: { event: ev }
         });
         // also apply to self instantly
-        if (msg.event) handleMessage({ type: "diceEvent", event: msg.event });
+        handleMessage({ type: "diceEvent", event: ev });
+        break;
+      }
+
+      // ===== Log ("журнал действий") =====
+      case "log": {
+        if (!currentRoomId) return;
+        const text = String(msg.text || "").trim();
+        if (!text) return;
+
+        // пишем лог в room_state, чтобы видели все и он сохранялся
+        const nextState = (lastState ? structuredClone(lastState) : createInitialGameState());
+        logEventToState(nextState, text);
+        await upsertRoomState(currentRoomId, nextState);
+
+        // мгновенный UI
+        handleMessage({ type: "state", state: nextState });
         break;
       }
 
