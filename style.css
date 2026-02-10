@@ -240,6 +240,112 @@ button:hover {
   border-color: rgb(37, 103, 14);
 }
 
+/* ===== Campaign maps parameters modal ===== */
+.cmp-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.cmp-overlay.hidden{ display:none; }
+
+.cmp-modal{
+  width: min(920px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  background: #141414;
+  border: 1px solid #444;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+}
+
+.cmp-modal-header{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+
+.cmp-modal-title{ font-weight: 900; }
+.cmp-modal-close{ padding: 6px 10px; border-radius: 10px; }
+
+.cmp-modal-body{ padding: 12px 14px 16px; }
+
+.cmp-toolbar{
+  display:flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.cmp-toolbar input,
+.cmp-toolbar select{
+  background: #1e1e1e;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 10px;
+  padding: 7px 10px;
+}
+
+.cmp-sections{
+  display: grid;
+  gap: 10px;
+}
+
+.cmp-section{
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255,255,255,0.03);
+}
+
+.cmp-section-head{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.cmp-section-name{ font-weight: 900; }
+
+.cmp-maps{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.cmp-map-row{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.12);
+}
+
+.cmp-map-row.is-active{
+  outline: 2px solid rgba(255,165,0,0.85);
+  box-shadow: 0 0 0 2px rgba(255,165,0,0.18);
+}
+
+.cmp-map-title{ font-weight: 800; }
+.cmp-map-meta{ font-size: 12px; opacity: 0.75; }
+
+.cmp-map-actions{ display:flex; gap: 8px; }
+.cmp-map-actions button{ padding: 6px 10px; border-radius: 10px; }
+
+.campaign-maps-active{ font-size: 12px; opacity: .8; margin-bottom: 8px; }
+
 .next-turn-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -298,37 +404,6 @@ button:hover {
   margin-bottom: 0;
 }
 
-/* Карты кампании (в блоке "Редактирования окружения") */
-.campaign-maps-box {
-  margin: 6px 0 10px 0;
-  padding: 8px;
-  border: 1px solid #333;
-  border-radius: 8px;
-  background: #101010;
-}
-.campaign-maps-title {
-  font-size: 12px;
-  color: #ddd;
-  margin-bottom: 6px;
-}
-.campaign-maps-row {
-  display: flex;
-  gap: 8px;
-}
-#campaign-maps-select {
-  flex: 1;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid #333;
-  background: #0c0c0c;
-  color: #fff;
-}
-#create-campaign-map {
-  width: auto;
-  padding: 8px 10px;
-  border-radius: 8px;
-}
-
 /* Подложка карты (в блоке "Редактирования окружения") */
 .env-bg-controls {
   margin: 6px 0 10px 0;
@@ -347,6 +422,29 @@ button:hover {
   margin: 0 0 8px 0;
 }
 
+
+/* Карты кампании (в блоке "Редактирования окружения") */
+.campaign-maps-controls {
+  margin: 6px 0 10px 0;
+  padding: 8px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #101010;
+}
+.campaign-maps-title {
+  font-size: 12px;
+  color: #ddd;
+  margin-bottom: 6px;
+}
+.campaign-maps-controls select {
+  width: 100%;
+  margin: 0 0 8px 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #0f0f0f;
+  border: 1px solid #333;
+  color: #fff;
+}
 /* Подсветки фаз (используем классы на конкретных кнопках) */
 #start-exploration.active {
   background-color: #2d6cdf;
