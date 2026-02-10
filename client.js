@@ -148,7 +148,8 @@ function applyRoleToUI() {
   const gmOnlyIds = [
     'clear-board','reset-game',
     'start-exploration','start-initiative','start-combat',
-    'edit-environment','add-wall','remove-wall','create-campaign-map','campaign-maps-select'
+    'edit-environment','add-wall','remove-wall',
+    'create-campaign-map','campaign-maps-select'
   ];
   gmOnlyIds.forEach((id) => {
     const el = document.getElementById(id);
@@ -206,36 +207,6 @@ function applyBoardBackgroundToDom(state) {
     bg.setAttribute('aria-hidden', 'true');
     board.prepend(bg);
   }
-
-
-// ================== CAMPAIGN MAPS UI (GM) ==================
-function updateCampaignMapsUI(state) {
-  if (!campaignMapsSelect) return;
-  const st = ensureStateHasMaps(state);
-  const maps = Array.isArray(st.maps) ? st.maps : [];
-
-  campaignMapsSelect.innerHTML = '';
-  maps.forEach((m, idx) => {
-    const opt = document.createElement('option');
-    opt.value = String(m.id);
-    opt.textContent = m.name || `Карта ${idx + 1}`;
-    campaignMapsSelect.appendChild(opt);
-  });
-
-  campaignMapsSelect.value = String(st.currentMapId || (maps[0]?.id || ""));
-}
-
-createCampaignMapBtn?.addEventListener('click', () => {
-  if (!isGM()) return;
-  sendMessage({ type: 'createCampaignMap' });
-});
-
-campaignMapsSelect?.addEventListener('change', () => {
-  if (!isGM()) return;
-  const id = String(campaignMapsSelect.value || '');
-  if (!id) return;
-  sendMessage({ type: 'switchCampaignMap', mapId: id });
-});
   if (!bg || !board) return;
 
   const dataUrl = state?.boardBgDataUrl || null;
@@ -482,15 +453,10 @@ loginDiv.style.display = 'none';
     }
 
     if (msg.type === "init" || msg.type === "state") {
-      // нормализация состояния + поддержка нескольких карт кампании
-      const normalized = loadMapToRoot(ensureStateHasMaps(deepClone(msg.state)), msg.state?.currentMapId);
-
+      const normalized = normalizeStateForUi(msg.state);
       lastState = normalized;
       boardWidth = normalized.boardWidth;
       boardHeight = normalized.boardHeight;
-
-      // UI карт кампании (селект + подписи)
-      try { updateCampaignMapsUI(normalized); } catch {}
 
       // обновим GM-инпуты (если controlbox подключен)
       try { window.ControlBox?.refreshGmInputsFromState?.(); } catch {}
@@ -516,6 +482,9 @@ loginDiv.style.display = 'none';
       if (selectedPlayer && !existingIds.has(selectedPlayer.id)) {
         selectedPlayer = null;
       }
+
+      // UI карт кампании (только у GM показывается правой панелью)
+      updateCampaignMapsUI(normalized);
 
       renderBoard(normalized);
       updatePhaseUI(normalized);
@@ -556,6 +525,28 @@ nextTurnBtn?.addEventListener("click", () => {
   // "Конец хода" — перейти к следующему по инициативе
   sendMessage({ type: "endTurn" });
 });
+
+// ================== CAMPAIGN MAPS (UI events) ==================
+if (campaignMapsSelect) {
+  campaignMapsSelect.addEventListener('change', (e) => {
+    if (!isGM()) return;
+    const id = String(e?.target?.value || '').trim();
+    if (!id) return;
+    sendMessage({ type: 'switchCampaignMap', mapId: id });
+  });
+}
+
+if (createCampaignMapBtn) {
+  createCampaignMapBtn.addEventListener('click', async () => {
+    if (!isGM()) return;
+    const def = getNextDefaultMapName(lastState || null);
+    const name = prompt('Название карты:', def);
+    if (name === null) return;
+    const clean = String(name).trim();
+    if (!clean) return;
+    await sendMessage({ type: 'createCampaignMap', name: clean });
+  });
+}
 
 // ================== ROLE UI ==================
 function setupRoleUI(role) {
@@ -1585,134 +1576,129 @@ function deepClone(obj) {
 }
 
 function createInitialGameState() {
-  const mapId = (crypto?.randomUUID ? crypto.randomUUID() : ("map-" + Math.random().toString(16).slice(2)));
+  // ВНИМАНИЕ: поля boardWidth/boardHeight/players/walls/... остаются на верхнем уровне
+  // как "активная карта", чтобы не переписывать весь код.
+  // При этом все карты хранятся в state.maps, а активная выбирается по state.activeMapId.
+  const baseMapId = (crypto?.randomUUID ? crypto.randomUUID() : ('map-' + Math.random().toString(16).slice(2)));
   const base = {
-    id: mapId,
-    name: "Карта 1",
-    boardWidth: 10,
-    boardHeight: 10,
+    id: baseMapId,
+    name: 'Карта1',
+    boardWidth: 20,
+    boardHeight: 20,
     boardBgDataUrl: null,
+    players: [],
     walls: [],
-    playersPos: {} // playerId -> {x,y}
+    turnOrder: [],
+    currentTurnIndex: 0
   };
   return {
-    schemaVersion: 2,
-
-    // Active map is mirrored into root-level fields for backward compatibility
-    currentMapId: mapId,
-    maps: [base],
-
+    // активная карта (дублируем для совместимости)
     boardWidth: base.boardWidth,
     boardHeight: base.boardHeight,
     boardBgDataUrl: base.boardBgDataUrl,
+    players: base.players,
     walls: base.walls,
+    turnOrder: base.turnOrder,
+    currentTurnIndex: base.currentTurnIndex,
 
+    // общие поля комнаты
     phase: "lobby",
-    players: [],
-    turnOrder: [],
-    currentTurnIndex: 0,
-    log: []
+    log: [],
+
+    // карты кампании
+    maps: [base],
+    activeMapId: baseMapId
   };
 }
 
+// ================== CAMPAIGN MAPS (helpers) ==================
 function ensureStateHasMaps(state) {
-  if (!state || typeof state !== "object") return createInitialGameState();
-
-  // already new schema
-  if (Array.isArray(state.maps) && state.maps.length) {
-    if (!state.currentMapId) state.currentMapId = String(state.maps[0].id || "map-1");
-    return state;
+  const st = (state && typeof state === 'object') ? state : createInitialGameState();
+  if (!Array.isArray(st.maps) || st.maps.length === 0) {
+    // миграция старого формата: текущие топ-левел данные становятся "Карта1"
+    const baseMapId = (crypto?.randomUUID ? crypto.randomUUID() : ('map-' + Math.random().toString(16).slice(2)));
+    st.maps = [
+      {
+        id: baseMapId,
+        name: 'Карта1',
+        boardWidth: Number(st.boardWidth) || 20,
+        boardHeight: Number(st.boardHeight) || 20,
+        boardBgDataUrl: st.boardBgDataUrl || null,
+        players: Array.isArray(st.players) ? st.players : [],
+        walls: Array.isArray(st.walls) ? st.walls : [],
+        turnOrder: Array.isArray(st.turnOrder) ? st.turnOrder : [],
+        currentTurnIndex: Number(st.currentTurnIndex) || 0
+      }
+    ];
+    st.activeMapId = baseMapId;
   }
-
-  // migrate old schema -> single map
-  const mapId = (crypto?.randomUUID ? crypto.randomUUID() : ("map-" + Math.random().toString(16).slice(2)));
-  const migratedMap = {
-    id: mapId,
-    name: "Карта 1",
-    boardWidth: Number(state.boardWidth) || 10,
-    boardHeight: Number(state.boardHeight) || 10,
-    boardBgDataUrl: state.boardBgDataUrl || null,
-    walls: Array.isArray(state.walls) ? state.walls : [],
-    playersPos: {}
-  };
-
-  (state.players || []).forEach((p) => {
-    if (!p || !p.id) return;
-    if (p.x === null || p.y === null || typeof p.x === "undefined" || typeof p.y === "undefined") return;
-    migratedMap.playersPos[p.id] = { x: p.x, y: p.y };
-  });
-
-  state.schemaVersion = 2;
-  state.currentMapId = mapId;
-  state.maps = [migratedMap];
-
-  // keep root mirror
-  state.boardWidth = migratedMap.boardWidth;
-  state.boardHeight = migratedMap.boardHeight;
-  state.boardBgDataUrl = migratedMap.boardBgDataUrl;
-  state.walls = migratedMap.walls;
-
-  return state;
-}
-
-function getActiveMap(state) {
-  const st = ensureStateHasMaps(state);
-  const id = String(st.currentMapId || "");
-  const maps = Array.isArray(st.maps) ? st.maps : [];
-  return maps.find(m => String(m.id) === id) || maps[0] || null;
-}
-
-function syncActiveToMap(state) {
-  const st = ensureStateHasMaps(state);
-  const m = getActiveMap(st);
-  if (!m) return st;
-
-  m.boardWidth = Number(st.boardWidth) || 10;
-  m.boardHeight = Number(st.boardHeight) || 10;
-  m.boardBgDataUrl = st.boardBgDataUrl || null;
-  m.walls = Array.isArray(st.walls) ? st.walls : [];
-
-  // capture positions from root players into map snapshot
-  const pos = {};
-  (st.players || []).forEach((p) => {
-    if (!p || !p.id) return;
-    if (p.x === null || p.y === null || typeof p.x === "undefined" || typeof p.y === "undefined") return;
-    pos[p.id] = { x: p.x, y: p.y };
-  });
-  m.playersPos = pos;
-
+  if (!st.activeMapId) st.activeMapId = st.maps[0]?.id;
   return st;
 }
 
-function loadMapToRoot(state, mapId) {
-  const st = ensureStateHasMaps(state);
-  const targetId = String(mapId || "");
-  const maps = Array.isArray(st.maps) ? st.maps : [];
-  const m = maps.find(mm => String(mm.id) === targetId) || maps[0];
-  if (!m) return st;
+function getMapById(st, id) {
+  const maps = Array.isArray(st?.maps) ? st.maps : [];
+  return maps.find(m => String(m?.id) === String(id)) || null;
+}
 
-  st.currentMapId = String(m.id);
+function getActiveMap(st) {
+  const s = ensureStateHasMaps(st);
+  return getMapById(s, s.activeMapId) || s.maps[0] || null;
+}
 
-  st.boardWidth = Number(m.boardWidth) || 10;
-  st.boardHeight = Number(m.boardHeight) || 10;
-  st.boardBgDataUrl = m.boardBgDataUrl || null;
-  st.walls = Array.isArray(m.walls) ? m.walls : [];
+function loadMapIntoTopLevel(st, map) {
+  if (!st || !map) return;
+  st.boardWidth = Number(map.boardWidth) || 20;
+  st.boardHeight = Number(map.boardHeight) || 20;
+  st.boardBgDataUrl = map.boardBgDataUrl || null;
+  st.players = Array.isArray(map.players) ? map.players : [];
+  st.walls = Array.isArray(map.walls) ? map.walls : [];
+  st.turnOrder = Array.isArray(map.turnOrder) ? map.turnOrder : [];
+  st.currentTurnIndex = Number(map.currentTurnIndex) || 0;
+}
 
-  // apply stored positions for this map
-  const pos = (m.playersPos && typeof m.playersPos === "object") ? m.playersPos : {};
-  (st.players || []).forEach((p) => {
-    if (!p || !p.id) return;
-    const pp = pos[p.id];
-    if (pp && Number.isFinite(Number(pp.x)) && Number.isFinite(Number(pp.y))) {
-      p.x = Number(pp.x);
-      p.y = Number(pp.y);
-    } else {
-      p.x = null;
-      p.y = null;
-    }
-  });
+function saveTopLevelIntoActiveMap(st) {
+  const s = ensureStateHasMaps(st);
+  const map = getActiveMap(s);
+  if (!map) return s;
+  map.boardWidth = Number(s.boardWidth) || 20;
+  map.boardHeight = Number(s.boardHeight) || 20;
+  map.boardBgDataUrl = s.boardBgDataUrl || null;
+  map.players = Array.isArray(s.players) ? s.players : [];
+  map.walls = Array.isArray(s.walls) ? s.walls : [];
+  map.turnOrder = Array.isArray(s.turnOrder) ? s.turnOrder : [];
+  map.currentTurnIndex = Number(s.currentTurnIndex) || 0;
+  return s;
+}
 
-  return st;
+function normalizeStateForUi(st) {
+  const s = ensureStateHasMaps(deepClone(st || null));
+  const active = getActiveMap(s);
+  if (active) loadMapIntoTopLevel(s, active);
+  return s;
+}
+
+function getNextDefaultMapName(st) {
+  const s = ensureStateHasMaps(st);
+  const names = new Set((s.maps || []).map(m => String(m?.name || '').trim()).filter(Boolean));
+  let i = s.maps.length + 1;
+  while (names.has(`Карта${i}`)) i++;
+  return `Карта${i}`;
+}
+
+function updateCampaignMapsUI(st) {
+  if (!campaignMapsSelect) return;
+  const s = ensureStateHasMaps(st);
+  const maps = Array.isArray(s.maps) ? s.maps : [];
+
+  campaignMapsSelect.innerHTML = '';
+  for (const m of maps) {
+    const opt = document.createElement('option');
+    opt.value = String(m.id);
+    opt.textContent = String(m.name || 'Без названия');
+    campaignMapsSelect.appendChild(opt);
+  }
+  campaignMapsSelect.value = String(s.activeMapId || maps[0]?.id || '');
 }
 
 function clamp(v, min, max) {
@@ -1791,11 +1777,13 @@ async function ensureSupabaseReady() {
 
 async function upsertRoomState(roomId, nextState) {
   await ensureSupabaseReady();
+  // Сохраняем текущие данные активной карты обратно в state.maps
+  nextState = saveTopLevelIntoActiveMap(nextState);
   const payload = {
     room_id: roomId,
     phase: String(nextState?.phase || "lobby"),
     current_actor_id: nextState?.turnOrder?.[nextState?.currentTurnIndex] ?? null,
-    state: syncActiveToMap(nextState),
+    state: nextState,
     updated_at: new Date().toISOString()
   };
   const { error } = await sbClient.from("room_state").upsert(payload);
@@ -2110,49 +2098,52 @@ async function sendMessage(msg) {
 
         const type = msg.type;
 
-        // ===== Campaign maps (GM) =====
-        if (type === "createCampaignMap") {
-          if (!isGM) return;
-
-          // сохранить текущую карту в snapshot
-          syncActiveToMap(next);
-
-          const newId = (crypto?.randomUUID ? crypto.randomUUID() : ("map-" + Math.random().toString(16).slice(2)));
-          const n = Array.isArray(next.maps) ? next.maps.length + 1 : 1;
-
-          if (!Array.isArray(next.maps)) next.maps = [];
-          next.maps.push({
-            id: newId,
-            name: `Карта ${n}`,
-            boardWidth: 10,
-            boardHeight: 10,
-            boardBgDataUrl: null,
-            walls: [],
-            playersPos: {}
-          });
-
-          loadMapToRoot(next, newId);
-          logEventToState(next, `Создана новая карта: Карта ${n}`);
-        }
-
-        else if (type === "switchCampaignMap") {
-          if (!isGM) return;
-          const targetId = String(msg.mapId || "");
-          if (!targetId) return;
-
-          syncActiveToMap(next);
-          loadMapToRoot(next, targetId);
-
-          const m = getActiveMap(next);
-          logEventToState(next, `Переключение карты: ${m?.name || "Карта"}`);
-        }
-
-
         if (type === "resizeBoard") {
           if (!isGM) return;
           next.boardWidth = msg.width;
           next.boardHeight = msg.height;
           logEventToState(next, "Поле изменено");
+        }
+
+        else if (type === 'createCampaignMap') {
+          if (!isGM) return;
+          ensureStateHasMaps(next);
+          // сохраним текущую активную карту перед созданием новой
+          saveTopLevelIntoActiveMap(next);
+
+          const name = String(msg.name || '').trim();
+          if (!name) return;
+          const id = (crypto?.randomUUID ? crypto.randomUUID() : ('map-' + Math.random().toString(16).slice(2)));
+
+          const newMap = {
+            id,
+            name,
+            boardWidth: 20,
+            boardHeight: 20,
+            boardBgDataUrl: null,
+            players: [],
+            walls: [],
+            turnOrder: [],
+            currentTurnIndex: 0
+          };
+          next.maps.push(newMap);
+          next.activeMapId = id;
+          loadMapIntoTopLevel(next, newMap);
+          logEventToState(next, `Создана карта: ${name}`);
+        }
+
+        else if (type === 'switchCampaignMap') {
+          if (!isGM) return;
+          ensureStateHasMaps(next);
+          // сохраним текущие данные активной карты
+          saveTopLevelIntoActiveMap(next);
+
+          const mapId = String(msg.mapId || '').trim();
+          const m = getMapById(next, mapId);
+          if (!m) return;
+          next.activeMapId = String(m.id);
+          loadMapIntoTopLevel(next, m);
+          logEventToState(next, `Переключение на карту: ${m.name || m.id}`);
         }
 
         else if (type === "startInitiative") {
