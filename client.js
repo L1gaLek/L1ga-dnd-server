@@ -80,6 +80,7 @@ const createCampaignMapBtn = document.getElementById('create-campaign-map');
 // Supabase replaces our old Node/WebSocket server.
 // GitHub Pages hosts only static files; realtime + DB are handled by Supabase.
 let sbClient;
+window.getSbClient = () => sbClient;
 let roomChannel;    // broadcast/presence channel (optional)
 let roomDbChannel;  // postgres_changes channel
 let myId;
@@ -368,6 +369,8 @@ joinBtn.addEventListener('click', () => {
 
 sbClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
+window.SUPABASE_FETCH_FN = "fetch";
+  
   // stable identity (doesn't depend on nickname)
   const savedUserId = localStorage.getItem("dnd_user_id") || "";
   const userId = savedUserId || ("xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
