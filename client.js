@@ -80,6 +80,7 @@ const createCampaignMapBtn = document.getElementById('create-campaign-map');
 // Supabase replaces our old Node/WebSocket server.
 // GitHub Pages hosts only static files; realtime + DB are handled by Supabase.
 let sbClient;
+window.getSbClient = () => sbClient;
 let roomChannel;    // broadcast/presence channel (optional)
 let roomDbChannel;  // postgres_changes channel
 let myId;
