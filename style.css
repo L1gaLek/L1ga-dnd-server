@@ -257,7 +257,7 @@ button:hover {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 4px; /* меньше расстояние до поля */
   width: auto;
 }
 
@@ -273,7 +273,7 @@ button:hover {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
+  gap: 2px;
 }
 
 #board-topbar #current-turn {
@@ -284,8 +284,11 @@ button:hover {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 8px;
+  gap: 2px; /* меньше расстояние между 2 рамками */
 }
+
+/* в index.html у GM-рамки был inline margin-top — перебиваем, чтобы зазор был меньше */
+#board-settings-gm{ margin-top: 2px !important; }
 
 .board-settings-box {
   border: 1px solid #444;
@@ -539,8 +542,16 @@ button:hover {
   font-size: 12px;
   line-height: 14px;
   white-space: nowrap;
-  overflow: auto;
+  overflow: hidden; /* убираем ползунок */
   text-overflow: ellipsis;
+}
+
+/* имя владельца (пользователя) — тоже с троеточием без ползунка */
+.owner-name{
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Рамка одного игрока в списке инициативы */
@@ -1040,7 +1051,7 @@ button:hover {
 /* HP chip: "liquid" fill (shrinks right-to-left) */
 .sheet-chip--hp{
   position: relative;
-  overflow: auto;
+  overflow: hidden; /* убираем ползунок в "Здоровье" */
   --hp-fill-pct: 100%;
 }
 
