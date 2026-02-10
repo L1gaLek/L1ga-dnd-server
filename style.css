@@ -110,6 +110,51 @@ body {
   margin-bottom: 10px;
 }
 
+/* Блоки над полем: "Вид" (слева) + "Карта" (справа, только GM) */
+.board-settings-panel {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+}
+
+.board-settings-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #333;
+  border-radius: 10px;
+  background: #101010;
+}
+
+.board-settings-box label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: #ddd;
+}
+
+/* Инпуты значений сделать в 2 раза уже */
+.board-settings-box input[type="number"] {
+  width: 55px;
+  padding: 5px 6px;
+}
+
+.board-settings-box button {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+@media (max-width: 900px) {
+  .board-settings-panel {
+    flex-wrap: wrap;
+  }
+}
+
 button, input, select {
   padding: 5px 10px;
   background-color: #2c2c2c;
@@ -3652,176 +3697,3 @@ textarea[data-sheet-path="text.profPlain.value"]{
   opacity:0.85;
   font-weight:700;
 }
-
-/* ===== Campaign maps: button row (GM) ===== */
-.campaign-maps-row{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-
-.campaign-active-map{
-  opacity:0.9;
-  font-size:13px;
-}
-
-/* ===== Campaign parameters modal (GM) ===== */
-.cmp-overlay{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.55);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:24px;
-  z-index:9999;
-}
-.cmp-overlay.hidden{ display:none; }
-
-.cmp-modal{
-  width:min(980px, 96vw);
-  max-height:86vh;
-  background:#141414;
-  color:#eee;
-  border:1px solid rgba(255,255,255,.12);
-  border-radius:14px;
-  overflow:hidden;
-  box-shadow:0 16px 60px rgba(0,0,0,.55);
-}
-
-.cmp-modal-header{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:12px 14px;
-  border-bottom:1px solid rgba(255,255,255,.1);
-}
-.cmp-modal-title{ font-weight:800; }
-.cmp-modal-close{
-  border:1px solid rgba(255,255,255,.18);
-  background:rgba(255,255,255,.06);
-  color:#fff;
-  border-radius:10px;
-  padding:6px 10px;
-  cursor:pointer;
-}
-
-.cmp-modal-body{
-  padding:14px;
-  overflow:auto;
-  max-height:calc(86vh - 52px);
-}
-
-.cmp-toolbar{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin-bottom:12px;
-}
-.cmp-btn{
-  border:1px solid rgba(255,255,255,.18);
-  background:rgba(255,255,255,.06);
-  color:#fff;
-  border-radius:10px;
-  padding:8px 10px;
-  cursor:pointer;
-}
-
-.cmp-dialog{
-  border:1px solid rgba(255,255,255,.14);
-  background:rgba(255,255,255,.04);
-  border-radius:12px;
-  padding:12px;
-  margin-bottom:12px;
-}
-.cmp-dialog.hidden{ display:none; }
-.cmp-dialog-title{ font-weight:800; margin-bottom:8px; }
-.cmp-dialog-row{
-  display:grid;
-  grid-template-columns: 90px 1fr;
-  gap:10px;
-  align-items:center;
-  margin:8px 0;
-}
-.cmp-dialog-row input,
-.cmp-dialog-row select{
-  width:100%;
-  padding:8px 10px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,.18);
-  background:rgba(0,0,0,.35);
-  color:#fff;
-}
-.cmp-dialog-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:10px; }
-.cmp-dialog-actions button{
-  border:1px solid rgba(255,255,255,.18);
-  background:rgba(255,255,255,.06);
-  color:#fff;
-  border-radius:10px;
-  padding:8px 10px;
-  cursor:pointer;
-}
-
-.cmp-sections{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap:12px;
-}
-@media (max-width: 860px){
-  .cmp-sections{ grid-template-columns: 1fr; }
-}
-
-.cmp-section{
-  border:1px solid rgba(255,255,255,.12);
-  background:rgba(255,255,255,.03);
-  border-radius:12px;
-  padding:12px;
-}
-.cmp-section-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  margin-bottom:10px;
-}
-.cmp-section-name{ font-weight:800; }
-.cmp-section-actions{ display:flex; gap:8px; }
-.cmp-section-actions button{
-  border:1px solid rgba(255,255,255,.18);
-  background:rgba(255,255,255,.06);
-  color:#fff;
-  border-radius:10px;
-  padding:6px 8px;
-  cursor:pointer;
-}
-
-.cmp-map-row{
-  display:grid;
-  grid-template-columns: 1fr;
-  gap:10px;
-  padding:10px;
-  border:1px solid rgba(255,255,255,.12);
-  border-radius:12px;
-  margin-bottom:10px;
-  background:rgba(0,0,0,.18);
-}
-.cmp-map-row.is-active{ outline:2px solid rgba(255,165,0,.55); }
-.cmp-map-title{ font-weight:700; }
-.cmp-map-meta{ opacity:.75; font-size:12px; }
-.cmp-map-actions{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-}
-.cmp-map-actions button,
-.cmp-map-actions select{
-  border:1px solid rgba(255,255,255,.18);
-  background:rgba(255,255,255,.06);
-  color:#fff;
-  border-radius:10px;
-  padding:6px 8px;
-}
-.cmp-map-actions select{ background:rgba(0,0,0,.35); }
-.cmp-move{ display:flex; gap:8px; align-items:center; }
-.cmp-empty{ opacity:.75; padding:8px 0; }
