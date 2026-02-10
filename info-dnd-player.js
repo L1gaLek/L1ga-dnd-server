@@ -2802,86 +2802,58 @@ function normalizeDndSuUrl(url) {
 }
 
 async function fetchSpellHtml(url) {
-  // IMPORTANT: нужен прокси, чтобы избежать CORS (GitHub Pages = статик).
-  // Поддерживаем 3 режима:
-  //  A) window.SUPABASE_FETCH_FN = полная URL Edge Function (https://<ref>.supabase.co/functions/v1/fetch)
-  //  B) window.SUPABASE_FETCH_FN = имя функции (например "fetch") + доступен window.getSbClient() -> invoke()
-  //  C) fallback: /api/fetch, прямой fetch, затем r.jina.ai
+  // GitHub Pages = статик: прямой fetch к dnd.su блокируется CORS.
+  // Поэтому порядок такой:
+  // 1) Supabase Edge Function (invoke) если доступен
+  // 2) Supabase Edge Function по полному URL (если так задано)
+  // 3) Fallback через r.jina.ai (read-only прокси)
+  // НИКАКИХ /api/fetch и НИКАКИХ прямых запросов к dnd.su на статике.
 
-  const rawFn = (typeof window !== "undefined" && window.SUPABASE_FETCH_FN)
-    ? String(window.SUPABASE_FETCH_FN).trim()
-    : "";
+  const targetUrl = normalizeDndSuUrl(url);
 
-  // --- A) SUPABASE_FETCH_FN как URL ---
-  if (rawFn && /^https?:\/\//i.test(rawFn)) {
-    const r = await fetch(rawFn, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url })
-    });
+  // --- 1) Supabase invoke по имени функции ---
+  try {
+    const fn = (typeof window !== "undefined" && window.SUPABASE_FETCH_FN) ? String(window.SUPABASE_FETCH_FN) : "";
+    const sbGetter = (typeof window !== "undefined" && typeof window.getSbClient === "function") ? window.getSbClient : null;
 
-    // ожидаем JSON { html } (наш Edge Function) или { text }/{ok,text} (старые варианты)
-    const data = await r.json().catch(() => null);
-    if (!r.ok || !data) {
-      throw new Error(`HTTP ${r.status}`);
-    }
-    const html = (data.html ?? data.text ?? "");
-    if (!String(html || "").trim()) {
-      throw new Error(data.error || "Empty response");
-    }
-    return String(html);
-  }
-
-  // --- B) SUPABASE_FETCH_FN как имя функции + invoke через supabase-js ---
-  // client.js содержит getSbClient() (если Supabase подключен). Используем его, если есть.
-  if (rawFn && /^[a-z0-9_-]+$/i.test(rawFn) && typeof window !== "undefined" && typeof window.getSbClient === "function") {
-    try {
-      const sb = window.getSbClient();
-      if (sb?.functions?.invoke) {
-        const { data, error } = await sb.functions.invoke(rawFn, { body: { url } });
+    if (fn && !fn.startsWith("http") && sbGetter) {
+      const sb = sbGetter();
+      if (sb && sb.functions && typeof sb.functions.invoke === "function") {
+        const { data, error } = await sb.functions.invoke(fn, { body: { url: targetUrl } });
         if (error) throw error;
-        const html = (data?.html ?? data?.text ?? "");
-        if (!String(html || "").trim()) throw new Error(data?.error || "Empty response");
-        return String(html);
+        if (!data || typeof data.html !== "string") throw new Error("Supabase function returned no html");
+        return data.html;
       }
-    } catch (e) {
-      // если invoke не сработал — идем дальше по фолбекам
-      console.warn("Supabase invoke failed, falling back:", e);
     }
+  } catch (e) {
+    console.warn("Supabase invoke fetch failed, falling back to proxy:", e);
   }
 
-  const host = (typeof location !== "undefined" && location.hostname) ? String(location.hostname) : "";
-  const isGithubPages = /(^|\.)github\.io$/i.test(host);
-
-  // 1) пробуем локальный прокси (/api/fetch) ТОЛЬКО если это не GitHub Pages
-  //    (на GitHub Pages это всегда 404 и только засоряет консоль)
-  if (!isGithubPages) {
-    try {
-      const r = await fetch(`/api/fetch?url=${encodeURIComponent(url)}`);
-      if (r.ok) return await r.text();
-    } catch {
-      // ignore
+  // --- 2) Supabase по полному URL (если задан) ---
+  try {
+    const fnUrl = (typeof window !== "undefined" && window.SUPABASE_FETCH_FN) ? String(window.SUPABASE_FETCH_FN) : "";
+    if (fnUrl && fnUrl.startsWith("http")) {
+      const r = await fetch(fnUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: targetUrl }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      if (!j || typeof j.html !== "string") throw new Error("Function returned no html");
+      return j.html;
     }
+  } catch (e) {
+    console.warn("Supabase URL fetch failed, falling back to proxy:", e);
   }
 
-  // 2) пробуем напрямую только НЕ на GitHub Pages (иначе гарантированный CORS на dnd.su)
-  if (!isGithubPages) {
-    try {
-      const r = await fetch(url, { method: "GET" });
-      if (r.ok) return await r.text();
-    } catch {
-      // ignore
-    }
-  }
-
-  // 3) последний шанс: публичный read-only прокси
-  //    Важно: это сторонний сервис. Если он недоступен — останется только ручной ввод.
-  const proxyUrl = `https://r.jina.ai/${String(url || "").trim()}`;
-  const r3 = await fetch(proxyUrl, { method: "GET" });
-  if (!r3.ok) throw new Error(`HTTP ${r3.status}`);
-  return await r3.text();
+  // --- 3) r.jina.ai fallback ---
+  const clean = targetUrl.replace(/^https?:\/\//i, "");
+  const proxyUrl = `https://r.jina.ai/https://${clean}`;
+  const resp = await fetch(proxyUrl, { method: "GET" });
+  if (!resp.ok) throw new Error(`Proxy HTTP ${resp.status}`);
+  return await resp.text();
 }
-
 
 
 function cleanupSpellDesc(raw) {
