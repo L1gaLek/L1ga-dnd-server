@@ -337,11 +337,15 @@ let mouseDown = false;
 const playerElements = new Map();
 let finishInitiativeSent = false;
 
-// users map (ownerId -> {name, role})
+// users map (ownerId -> {name, role}) — только подключённые сейчас
 const usersById = new Map();
-// стабильный порядок пользователей (по времени подключения).
-// нужен, чтобы список "Пользователи и персонажи" не "прыгал" при обновлениях presence/DB.
-let usersOrder = []; // array of userId
+// стабильный порядок пользователей (по времени подключения): запоминаем первый приход
+// и больше не удаляем из порядка даже если polling один раз "мигнул".
+// Это делает список "Пользователи и персонажи" полностью статичным.
+let usersOrder = []; // array of userId (master order)
+// чтобы порядок был стабильным, но при реальном выходе из комнаты пользователь исчезал из списка
+// и при повторном входе становился "последним" в своей группе.
+const userMissingTicks = new Map(); // userId -> missing polls count
 
 // стартово прячем панель бросков до входа в комнату
 if (diceViz) diceViz.style.display = 'none';
@@ -468,16 +472,36 @@ loginDiv.style.display = 'none';
         const uid = String(u.id);
         incoming.add(uid);
 
-        if (!usersById.has(uid)) {
+        // запоминаем "первый приход" навсегда, чтобы порядок не менялся
+        if (!usersOrder.includes(uid)) {
           usersOrder.push(uid);
         }
+        userMissingTicks.set(uid, 0);
         usersById.set(uid, { name: u.name, role: u.role });
       });
 
-      // удаляем тех, кто вышел (и из Map, и из порядка)
-      usersOrder = usersOrder.filter((id) => incoming.has(String(id)));
+      // удаляем тех, кто вышел (с задержкой, чтобы не было "прыжков" из‑за кратких сбоев polling)
+      // 1) из текущей Map — сразу
       Array.from(usersById.keys()).forEach((id) => {
         if (!incoming.has(String(id))) usersById.delete(id);
+      });
+      // 2) из порядка — только если отсутствует несколько опросов подряд
+      (usersOrder || []).forEach((id) => {
+        const sid = String(id);
+        if (incoming.has(sid)) return;
+        const n = (userMissingTicks.get(sid) || 0) + 1;
+        userMissingTicks.set(sid, n);
+      });
+      const DROP_AFTER = 3; // 3 * 5s = 15s
+      usersOrder = (usersOrder || []).filter((id) => {
+        const sid = String(id);
+        const n = userMissingTicks.get(sid) || 0;
+        if (incoming.has(sid)) return true;
+        if (n >= DROP_AFTER) {
+          userMissingTicks.delete(sid);
+          return false;
+        }
+        return true;
       });
       updatePlayerList();
     }
@@ -694,15 +718,26 @@ function updatePlayerList() {
     ? lastState.turnOrder[lastState.currentTurnIndex]
     : null;
 
-  // Стабильный порядок пользователей: GM всегда сверху, остальные — по времени подключения.
+  // Стабильный порядок пользователей:
+  // 1) GM всегда сверху
+  // 2) затем DnD-P (Player)
+  // 3) затем Spectator
+  // 4) внутри каждой группы — по времени первого подключения (usersOrder)
   const gmIds = [];
+  const playerIds = [];
+  const spectrIds = [];
   const otherIds = [];
+
   (usersOrder || []).forEach((ownerId) => {
     const u = usersById.get(String(ownerId));
-    const isGm = normalizeRoleForUi(u?.role) === 'GM';
-    (isGm ? gmIds : otherIds).push(String(ownerId));
+    if (!u) return; // сейчас не подключён
+    const r = normalizeRoleForUi(u.role);
+    if (r === 'GM') gmIds.push(String(ownerId));
+    else if (r === 'DnD-Player') playerIds.push(String(ownerId));
+    else if (r === 'Spectator') spectrIds.push(String(ownerId));
+    else otherIds.push(String(ownerId));
   });
-  const orderedOwnerIds = [...gmIds, ...otherIds];
+  const orderedOwnerIds = [...gmIds, ...playerIds, ...spectrIds, ...otherIds];
 
   // Группируем в Map, чтобы порядок не "прыгал"
   const grouped = new Map(); // ownerId -> { ownerName, players: [] }
@@ -738,6 +773,7 @@ function updatePlayerList() {
     const ownerNameSpan = document.createElement('span');
     ownerNameSpan.className = 'owner-name';
     ownerNameSpan.textContent = userInfo?.name || group.ownerName;
+    ownerNameSpan.title = ownerNameSpan.textContent;
 
     const role = userInfo?.role;
     const badge = document.createElement('span');
@@ -777,6 +813,7 @@ function updatePlayerList() {
       text.classList.add('player-name-text');
       const initVal = (p.initiative !== null && p.initiative !== undefined) ? p.initiative : 0;
       text.textContent = `${p.name} (${initVal})`;
+      text.title = p.name;
 
       const nameWrap = document.createElement('div');
       nameWrap.classList.add('player-name-wrap');
