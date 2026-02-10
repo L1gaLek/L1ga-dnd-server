@@ -231,6 +231,207 @@
       dragTouched = new Set();
     });
 
+    // ===== Campaign maps: Parameters modal (GM) =====
+    const campaignParamsBtn = document.getElementById('campaign-params');
+    let cmpOverlay = null;
+    let cmpOpen = false;
+    let lastCampaignState = null;
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"]/g, (c) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;'
+      }[c] || c));
+    }
+
+    function ensureCmpOverlay() {
+      if (cmpOverlay) return cmpOverlay;
+      const overlay = document.createElement('div');
+      overlay.className = 'cmp-overlay hidden';
+      overlay.setAttribute('aria-hidden', 'true');
+      overlay.innerHTML = `
+        <div class="cmp-modal" role="dialog" aria-modal="true">
+          <div class="cmp-modal-header">
+            <div class="cmp-modal-title">Параметры кампании</div>
+            <button class="cmp-modal-close" type="button" title="Закрыть">✕</button>
+          </div>
+          <div class="cmp-modal-body">
+            <div class="cmp-toolbar">
+              <button type="button" class="cmp-btn" data-cmp-create-section>Создать раздел</button>
+              <button type="button" class="cmp-btn" data-cmp-create-map>Создать карту</button>
+              <div style="flex:1"></div>
+              <button type="button" class="cmp-btn" data-cmp-refresh>Обновить</button>
+            </div>
+            <div class="cmp-sections" data-cmp-sections></div>
+          </div>
+        </div>
+      `;
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeCmp();
+      });
+      overlay.querySelector('.cmp-modal-close')?.addEventListener('click', closeCmp);
+      overlay.querySelector('[data-cmp-refresh]')?.addEventListener('click', () => renderCampaignParams(lastCampaignState || ctx.getState?.() || null));
+
+      overlay.addEventListener('click', async (e) => {
+        const t = e.target;
+        if (t?.closest?.('[data-cmp-create-section]')) {
+          if (!ctx.isGM?.()) return;
+          const st = lastCampaignState || ctx.getState?.() || null;
+          const def = getNextDefaultSectionName(st);
+          const name = prompt('Название раздела:', def);
+          if (name === null) return;
+          const clean = String(name).trim();
+          if (!clean) return;
+          ctx.sendMessage?.({ type: 'createMapSection', name: clean });
+          return;
+        }
+        if (t?.closest?.('[data-cmp-create-map]')) {
+          if (!ctx.isGM?.()) return;
+          const st = lastCampaignState || ctx.getState?.() || null;
+          openCreateMapFlow(st);
+          return;
+        }
+
+        const selBtn = t?.closest?.('[data-cmp-select-map]');
+        if (selBtn) {
+          if (!ctx.isGM?.()) return;
+          const mapId = String(selBtn.getAttribute('data-cmp-select-map') || '').trim();
+          if (!mapId) return;
+          ctx.sendMessage?.({ type: 'switchCampaignMap', mapId });
+          return;
+        }
+
+        const delBtn = t?.closest?.('[data-cmp-delete-map]');
+        if (delBtn) {
+          if (!ctx.isGM?.()) return;
+          const mapId = String(delBtn.getAttribute('data-cmp-delete-map') || '').trim();
+          const mapName = String(delBtn.getAttribute('data-cmp-delete-name') || '').trim();
+          if (!mapId) return;
+          if (!confirm(`Удалить карту "${mapName || 'Без названия'}"?`)) return;
+          ctx.sendMessage?.({ type: 'deleteCampaignMap', mapId });
+          return;
+        }
+      });
+
+      document.body.appendChild(overlay);
+      cmpOverlay = overlay;
+      return overlay;
+    }
+
+    function openCmp() {
+      const overlay = ensureCmpOverlay();
+      cmpOpen = true;
+      overlay.classList.remove('hidden');
+      overlay.setAttribute('aria-hidden', 'false');
+      renderCampaignParams(lastCampaignState || ctx.getState?.() || null);
+    }
+
+    function closeCmp() {
+      if (!cmpOverlay) return;
+      cmpOpen = false;
+      cmpOverlay.classList.add('hidden');
+      cmpOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    function getNextDefaultSectionName(st) {
+      const sections = Array.isArray(st?.mapSections) ? st.mapSections : [];
+      const names = new Set(sections.map(s => String(s?.name || '').trim()).filter(Boolean));
+      let i = sections.length + 1;
+      while (names.has(`Раздел ${i}`)) i++;
+      return `Раздел ${i}`;
+    }
+
+    function getNextDefaultMapName(st) {
+      const maps = Array.isArray(st?.maps) ? st.maps : [];
+      const names = new Set(maps.map(m => String(m?.name || '').trim()).filter(Boolean));
+      let i = maps.length + 1;
+      while (names.has(`Карта ${i}`)) i++;
+      return `Карта ${i}`;
+    }
+
+    function openCreateMapFlow(st) {
+      const sections = Array.isArray(st?.mapSections) ? st.mapSections : [];
+      if (!sections.length) {
+        alert('Сначала создайте раздел.');
+        return;
+      }
+      const list = sections.map((s, idx) => `${idx + 1}) ${s.name}`).join('\n');
+      const pick = prompt(`Выберите раздел (номер):\n${list}`, '1');
+      if (pick === null) return;
+      const idx = Math.max(1, Math.min(sections.length, Number(pick) || 1)) - 1;
+      const sec = sections[idx];
+      const defName = getNextDefaultMapName(st);
+      const name = prompt('Название карты:', defName);
+      if (name === null) return;
+      const clean = String(name).trim();
+      if (!clean) return;
+      ctx.sendMessage?.({ type: 'createCampaignMap', sectionId: sec.id, name: clean });
+    }
+
+    function renderCampaignParams(st) {
+      const overlay = ensureCmpOverlay();
+      lastCampaignState = st;
+      const sectionsEl = overlay.querySelector('[data-cmp-sections]');
+      if (!sectionsEl) return;
+
+      const sections = Array.isArray(st?.mapSections) ? st.mapSections : [];
+      const maps = Array.isArray(st?.maps) ? st.maps : [];
+      const curId = String(st?.currentMapId || '');
+
+      if (!sections.length) {
+        sectionsEl.innerHTML = `<div style="opacity:.8">Разделов пока нет. Нажмите «Создать раздел».</div>`;
+        return;
+      }
+
+      const bySec = new Map();
+      sections.forEach(s => bySec.set(String(s.id), []));
+      maps.forEach(m => {
+        const sid = String(m?.sectionId || sections[0]?.id || '');
+        if (!bySec.has(sid)) bySec.set(sid, []);
+        bySec.get(sid).push(m);
+      });
+
+      sectionsEl.innerHTML = sections.map(s => {
+        const sid = String(s.id);
+        const arr = bySec.get(sid) || [];
+        const mapsHtml = arr.length ? arr.map(m => {
+          const mid = String(m?.id);
+          const isActive = (mid === curId);
+          const bw = Number(m?.boardWidth) || 10;
+          const bh = Number(m?.boardHeight) || 10;
+          return `
+            <div class="cmp-map-row${isActive ? ' is-active' : ''}">
+              <div>
+                <div class="cmp-map-title">${escapeHtml(m?.name || 'Без названия')}</div>
+                <div class="cmp-map-meta">${bw}×${bh} клеток</div>
+              </div>
+              <div class="cmp-map-actions">
+                <button type="button" data-cmp-select-map="${escapeHtml(mid)}">Выбрать</button>
+                <button type="button" data-cmp-delete-map="${escapeHtml(mid)}" data-cmp-delete-name="${escapeHtml(m?.name || '')}">Удалить</button>
+              </div>
+            </div>
+          `;
+        }).join('') : `<div style="opacity:.7">В этом разделе пока нет карт.</div>`;
+
+        return `
+          <div class="cmp-section">
+            <div class="cmp-section-head">
+              <div class="cmp-section-name">${escapeHtml(s?.name || 'Раздел')}</div>
+            </div>
+            <div class="cmp-maps">${mapsHtml}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    campaignParamsBtn?.addEventListener('click', () => {
+      if (!ctx.isGM?.()) return;
+      openCmp();
+    });
+
     // ===== initial =====
     setEnvButtons();
     refreshGmInputsFromState();
@@ -240,7 +441,15 @@
       setViewport,
       refreshGmInputsFromState,
       getViewport: () => ({ cols: viewportCols, rows: viewportRows }),
-      getZoom: () => zoom
+      getZoom: () => zoom,
+      openCampaignParams: () => {
+        if (!ctx.isGM?.()) return;
+        openCmp();
+      },
+      updateCampaignParams: (st) => {
+        lastCampaignState = st;
+        if (cmpOpen) renderCampaignParams(st);
+      }
     };
   };
 })();
