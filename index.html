@@ -132,14 +132,15 @@
 
           <div id="board-topbar">
 
-          <div id="current-turn">
-            Текущий игрок: <span id="current-player">-</span>
-            <button id="next-turn" class="next-turn-btn" type="button" title="Конец хода (по инициативе)">
-              Конец хода
-            </button>
-          </div>
+            <!-- Текущий игрок — по центру поля, над рамками размеров -->
+            <div id="current-turn">
+              Текущий игрок: <span id="current-player">-</span>
+              <button id="next-turn" class="next-turn-btn" type="button" title="Конец хода (по инициативе)">
+                Конец хода
+              </button>
+            </div>
 
-          <div id="board-settings">
+            <div id="board-settings">
             <div id="board-settings-viewport" class="board-settings-box">
               <label>Ширина поля:
                 <input type="number" id="board-width" value="10" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
@@ -160,9 +161,9 @@
               </label>
               <button id="create-board-gm" type="button" title="Изменить реальный размер карты (видно всем)">Применить карту</button>
             </div>
-          </div>
+            </div>
 
-        </div>
+          </div>
 
           <div id="board-wrapper">
             <div id="game-board">
