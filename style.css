@@ -110,21 +110,6 @@ body {
   margin-bottom: 10px;
 }
 
-/* ===== Настройки рамки поля (вид/ГМ) ===== */
-.board-settings-row{
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 10px;
-  align-items: end;
-}
-
-.board-settings-row label{
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
 button, input, select {
   padding: 5px 10px;
   background-color: #2c2c2c;
@@ -161,6 +146,17 @@ button:hover {
   background-color: #111;
 }
 
+/* Подложка карты (картинка/.gif). Растягивается на весь размер поля */
+#board-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  pointer-events: none;
+}
+
 /* Клетки поля */
 .cell {
   width: 50px;
@@ -170,11 +166,21 @@ button:hover {
 
   /* вместо border */
   outline: 1px solid #444;
+
+  /* поверх подложки */
+  position: relative;
+  z-index: 1;
+}
+
+/* Когда установлена подложка — делаем клетки полупрозрачными, но сетка видна */
+#game-board.has-bg .cell {
+  background-color: rgba(42, 42, 42, 0.28);
 }
 
 /* Игроки */
 .player {
   position: absolute;
+  z-index: 2;
   border-radius: 50%;
   color: white;
   font-weight: bold;
@@ -288,6 +294,25 @@ button:hover {
 
 .side-box button:last-child {
   margin-bottom: 0;
+}
+
+.side-sep {
+  height: 1px;
+  background: #333;
+  margin: 10px 0;
+}
+
+.side-subtitle {
+  font-size: 12px;
+  color: #ddd;
+  margin: 0 0 6px 0;
+}
+
+.side-hint {
+  font-size: 11px;
+  color: #aaa;
+  margin: 6px 0 10px 0;
+  line-height: 1.2;
 }
 
 /* Подсветки фаз (используем классы на конкретных кнопках) */
