@@ -1130,9 +1130,9 @@ function updatePlayerList() {
         actions.appendChild(box);
       }
 
-      // ===== Ряд управления: размер + цвет =====
+      // ===== Ряд управления: размер + цвет + быстрые кнопки =====
       const midRow = document.createElement('div');
-      midRow.className = 'player-actions-row';
+      midRow.className = 'player-actions-row player-actions-row--controls';
 
       if (myRole === "GM" || p.ownerId === myId) {
         // размер
@@ -1164,6 +1164,31 @@ function updatePlayerList() {
         });
         midRow.appendChild(colorInput);
       }
+      // Быстрые кнопки: "С поля" / "Удалить" — в один ряд с размером/цветом
+      if (myRole === "GM" || p.ownerId === myId) {
+        const removeFromBoardBtn = document.createElement('button');
+        removeFromBoardBtn.textContent = 'С поля';
+        removeFromBoardBtn.classList.add('mini-action-btn','mini-action-btn--secondary');
+        removeFromBoardBtn.onclick = (e) => {
+          e.stopPropagation();
+          sendMessage({ type: 'removePlayerFromBoard', id: p.id });
+        };
+
+        const removeCompletelyBtn = document.createElement('button');
+        removeCompletelyBtn.textContent = 'Удалить';
+        removeCompletelyBtn.classList.add('mini-action-btn','mini-action-btn--danger');
+        removeCompletelyBtn.onclick = (e) => {
+          e.stopPropagation();
+          sendMessage({ type: 'removePlayerCompletely', id: p.id });
+        };
+
+        const spacer = document.createElement('span');
+        spacer.className = 'player-actions-spacer';
+        midRow.appendChild(spacer);
+        midRow.appendChild(removeFromBoardBtn);
+        midRow.appendChild(removeCompletelyBtn);
+      }
+
       actions.appendChild(midRow);
 
       li.addEventListener('click', () => {
@@ -1178,29 +1203,10 @@ function updatePlayerList() {
           sendMessage({ type: 'movePlayer', id: p.id, x: spot.x, y: spot.y });
         }
       });
-      // ===== "С поля" / "Удалить" — в том же ряду, что размер и цвет =====
-      if (myRole === "GM" || p.ownerId === myId) {
-        const removeFromBoardBtn = document.createElement('button');
-        removeFromBoardBtn.textContent = 'С поля';
-        removeFromBoardBtn.classList.add('mini-action-btn');
-        removeFromBoardBtn.onclick = (e) => {
-          e.stopPropagation();
-          sendMessage({ type: 'removePlayerFromBoard', id: p.id });
-        };
 
-        const removeCompletelyBtn = document.createElement('button');
-        removeCompletelyBtn.textContent = 'Удалить';
-        removeCompletelyBtn.classList.add('mini-action-btn');
-        removeCompletelyBtn.onclick = (e) => {
-          e.stopPropagation();
-          sendMessage({ type: 'removePlayerCompletely', id: p.id });
-        };
+      // Нижний ряд больше не нужен — кнопки перенесены в ряд управления
 
-        // midRow уже создан выше
-        midRow.appendChild(removeFromBoardBtn);
-        midRow.appendChild(removeCompletelyBtn);
-      }
-li.appendChild(actions);
+      li.appendChild(actions);
       ul.appendChild(li);
     });
 
@@ -1372,23 +1378,21 @@ let othersDiceWrap = null;
 function ensureOthersDiceUI() {
   if (othersDiceWrap) return othersDiceWrap;
 
-  // Prefer static placeholder above the main dice panel (index.html provides it)
-  const existing = document.getElementById("dice-others");
+  // Если блок уже есть в HTML (в стеке над панелью) — используем его
+  const existing = document.getElementById('dice-others');
   if (existing) {
     othersDiceWrap = existing;
+    if (!othersDiceWrap.querySelector('.dice-others__title')) {
+      othersDiceWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
+    }
     return othersDiceWrap;
   }
 
-  // Fallback (shouldn't happen): create and place before dice-viz
+  // Fallback: старый вариант (если HTML не обновлён)
   othersDiceWrap = document.createElement("div");
-  othersDiceWrap.id = "dice-others";
   othersDiceWrap.className = "dice-others";
   othersDiceWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
-
-  const diceViz = document.getElementById("dice-viz");
-  if (diceViz && diceViz.parentNode) diceViz.parentNode.insertBefore(othersDiceWrap, diceViz);
-  else document.body.appendChild(othersDiceWrap);
-
+  document.body.appendChild(othersDiceWrap);
   return othersDiceWrap;
 }
 
