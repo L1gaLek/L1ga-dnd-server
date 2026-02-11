@@ -100,6 +100,26 @@ let roomDbChannel;  // postgres_changes channel
 let myId;
 let myRole;
 
+// Broadcast dice event without touching room_state.
+// IMPORTANT: do NOT call sendMessage({type:'diceEvent'}) from inside state mutations,
+// because diceEvent case writes logs using lastState and can overwrite newer state.
+async function broadcastDiceEventOnly(event) {
+  try {
+    if (roomChannel && currentRoomId && event) {
+      await roomChannel.send({
+        type: 'broadcast',
+        event: 'diceEvent',
+        payload: { event }
+      });
+    }
+  } catch {}
+
+  // apply to self instantly (main panel)
+  try {
+    if (event) handleMessage({ type: 'diceEvent', event });
+  } catch {}
+}
+
 // ===== Role helpers (MVP) =====
 function normalizeRoleForDb(role) {
   const r = String(role || '');
@@ -2520,6 +2540,10 @@ async function sendMessage(msg) {
         break;
       }
 
+      // NOTE: do not add new switch cases below without care.
+      // Some game mechanics (initiative/combat join) need to broadcast dice rolls
+      // without writing to room_state (to avoid overwriting fresh state with lastState).
+
       // ===== Saved bases (characters) =====
       case "listSavedBases": {
         const userId = String(localStorage.getItem("dnd_user_id") || "");
@@ -2867,6 +2891,67 @@ async function sendMessage(msg) {
           logEventToState(next, `${isMonster ? 'Добавлен монстр' : 'Добавлен игрок'} ${player.name}`);
         }
 
+        else if (type === "combatInitChoice") {
+          // When a new character is created during combat, it must pick initiative:
+          // - 'roll' : d20 + DEX mod of this character
+          // - 'base' : copy initiative from owner's Base character
+          if (next.phase !== "combat") return;
+          const pid = String(msg.id || "");
+          const choice = String(msg.choice || "");
+          if (!pid) return;
+          const p = (next.players || []).find(pp => pp.id === pid);
+          if (!p) return;
+          if (!p.pendingInitiativeChoice) return;
+          if (!isGM && !ownsPlayer(p)) return;
+
+          let total = null;
+          let kindText = "";
+          let rolls = [];
+          let bonus = 0;
+
+          if (choice === "roll") {
+            const roll = Math.floor(Math.random() * 20) + 1;
+            const dexMod = getDexMod(p);
+            total = roll + dexMod;
+            kindText = `Инициатива (в бою): d20${dexMod >= 0 ? "+" : ""}${dexMod}`;
+            rolls = [roll];
+            bonus = dexMod;
+            const sign = dexMod >= 0 ? "+" : "";
+            logEventToState(next, `${p.name} бросил инициативу (в бою): ${roll}${sign}${dexMod} = ${total}`);
+          } else if (choice === "base") {
+            const base = (next.players || []).find(pp => pp && pp.isBase && String(pp.ownerId) === String(p.ownerId));
+            const baseInit = Number(base?.initiative);
+            if (!base || !Number.isFinite(baseInit)) {
+              handleMessage({ type: "error", message: "У вашей основы нет инициативы (сначала бросьте инициативу для основы)." });
+              return;
+            }
+            total = baseInit;
+            kindText = "Инициатива основы";
+            rolls = [];
+            bonus = 0;
+            logEventToState(next, `${p.name} взял инициативу основы: ${total}`);
+          } else {
+            return;
+          }
+
+          p.initiative = total;
+          p.hasRolledInitiative = true;
+          p.pendingInitiativeChoice = false;
+          p.willJoinNextRound = true; // добавится в turnOrder в начале следующего раунда (уже реализовано в endTurn)
+
+          await broadcastDiceEventOnly({
+            fromId: myUserId,
+            fromName: p.name,
+            kindText,
+            sides: 20,
+            count: 1,
+            bonus,
+            rolls,
+            total,
+            crit: ""
+          });
+        }
+
         else if (type === "movePlayer") {
           const p = (next.players || []).find(pp => pp.id === msg.id);
           if (!p) return;
@@ -3022,33 +3107,32 @@ else if (type === "addWall") {
 
         else if (type === "rollInitiative") {
           if (next.phase !== "initiative") return;
-          (next.players || [])
-            .filter(p => p.ownerId === myUserId && !p.hasRolledInitiative)
-            .forEach(p => {
-              const roll = Math.floor(Math.random() * 20) + 1;
-              const dexMod = getDexMod(p);
-              const total = roll + dexMod;
-              p.initiative = total;
-              p.hasRolledInitiative = true;
+          // IMPORTANT: we must NOT call sendMessage({type:'diceEvent'}) here.
+          // diceEvent case writes logs using lastState and can overwrite fresh initiative changes.
+          const toRoll = (next.players || []).filter(p => String(p.ownerId) === myUserId && !p.hasRolledInitiative);
+          for (const p of toRoll) {
+            const roll = Math.floor(Math.random() * 20) + 1;
+            const dexMod = getDexMod(p);
+            const total = roll + dexMod;
+            p.initiative = total;
+            p.hasRolledInitiative = true;
 
-              // live dice event
-              sendMessage({
-                type: "diceEvent",
-                event: {
-                  fromId: myUserId,
-                  fromName: p.name,
-                  kindText: `Инициатива: d20${dexMod >= 0 ? "+" : ""}${dexMod}`,
-                  sides: 20,
-                  count: 1,
-                  bonus: dexMod,
-                  rolls: [roll],
-                  total,
-                  crit: ""
-                }
-              });
-              const sign = dexMod >= 0 ? "+" : "";
-              logEventToState(next, `${p.name} бросил инициативу: ${roll}${sign}${dexMod} = ${total}`);
+            const sign = dexMod >= 0 ? "+" : "";
+            logEventToState(next, `${p.name} бросил инициативу: ${roll}${sign}${dexMod} = ${total}`);
+
+            // live dice event (broadcast only)
+            await broadcastDiceEventOnly({
+              fromId: myUserId,
+              fromName: p.name,
+              kindText: `Инициатива: d20${dexMod >= 0 ? "+" : ""}${dexMod}`,
+              sides: 20,
+              count: 1,
+              bonus: dexMod,
+              rolls: [roll],
+              total,
+              crit: ""
             });
+          }
         }
 
         else if (type === "startCombat") {
