@@ -11,6 +11,14 @@ body {
   color: #ddd;
 }
 
+:root{
+  /* единая геометрия левой колонки */
+  --left-gap: 16px;
+  --pm-w: 240px;   /* "Управление игроками" */
+  --pl-w: 300px;   /* "Пользователи и персонажи" + "Очередность хода" */
+  --dice-w: var(--pm-w);
+}
+
 /* Основной контейнер */
 #main-container {
   display: flex;
@@ -22,8 +30,8 @@ body {
 #action-log-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  width: 600px; /* ширина под управление + список/очередность */
+  gap: var(--left-gap);
+  width: calc(var(--pm-w) + var(--pl-w) + var(--left-gap));
 }
 
 #content-row {
@@ -54,67 +62,69 @@ body {
 }
 
 #player-management {
-  width: 210px;
+  width: var(--pm-w);
   max-height: 260px;
-  overflow-x: hidden; /* без горизонтального ползунка */
+  overflow-x: hidden;
 }
 
 #player-list-container {
-  width: 330px;
+  width: var(--pl-w);
   max-height: 360px;
   overflow-x: hidden;
 }
 
-/* Стек справа под журналом: список игроков + очередь (ниже) */
+/* Справа под журналом: список + очередь друг под другом */
 #player-side-stack{
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  width: 330px;
+  gap: var(--left-gap);
+  width: var(--pl-w);
 }
 
 /* ===== Управление игроками — компактная сетка без переносов кнопки ===== */
 #player-management #player-controls{
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 6px;
-  align-items: center;
-}
-
-/* чтобы элементы не вылезали и не раздвигали рамку */
-#player-management #player-controls input,
-#player-management #player-controls select,
-#player-management #player-controls button{
-  min-width: 0;
-  max-width: 100%;
-}
-
-#player-management #player-controls input[type="color"]{
-  padding: 0;
-  width: 34px;
-  height: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 #player-management #player-controls input[type="text"]{
-  grid-column: 1 / -1;
   width: 100%;
 }
 
-#player-management #player-controls .player-type{
-  grid-column: 1 / -1;
+/* строка: цвет + размер */
+.pm-row{ display:flex; align-items:center; gap: 10px; }
+.pm-row--size{ justify-content: space-between; }
+
+#player-management #player-color{
+  padding: 0;
+  width: 36px;
+  height: 28px;
 }
 
-#player-management #player-controls label{
-  display: contents; /* чтобы "Размер" не ломал сетку */
+.pm-size{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
-#player-management #player-controls #player-size{
+.pm-size-label{ font-size: 12px; opacity: .9; }
+
+#player-management #player-size{
   width: 88px;
 }
 
+/* строка: "Основа" + "Добавить" */
+.pm-row--bottom{ justify-content: space-between; }
+
 #player-management #add-player{
-  grid-column: 1 / -1;
-  width: 100%;
+  white-space: nowrap;
+  padding: 6px 10px;
+}
+
+#player-management #add-player{
+  width: 120px;
   white-space: nowrap;
 }
 
@@ -167,7 +177,7 @@ body {
 /* Ряд рамок размеров (персональная рамка + GM-карта) */
 .board-settings-row{
   display: flex;
-  flex-wrap: nowrap; /* в один ряд */
+  flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
   align-items: flex-start;
@@ -175,21 +185,15 @@ body {
 }
 
 .board-settings-box{
-  min-width: 320px;
+  min-width: 240px;
 }
 
 .board-settings-box label{
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .board-settings-box input[type="number"]{
-  font-size: 15px;
-  padding: 6px 8px;
-}
-
-.board-settings-box button{
   font-size: 14px;
-  padding: 6px 10px;
 }
 
 button, input, select {
@@ -405,9 +409,10 @@ outline-color: #666;
 
 #board-settings {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px; /* меньше расстояние между 2 рамками */
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 10px;
 }
 
 /* в index.html у GM-рамки был inline margin-top — перебиваем, чтобы зазор был меньше */
@@ -417,12 +422,12 @@ outline-color: #666;
   border: 1px solid #444;
   border-radius: 8px;
   background: #141414;
-  padding: 4px 6px;
+  padding: 6px 8px;
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: nowrap;
-  font-size: 10px; /* в ~2 раза меньше */
+  font-size: 13px;
 }
 
 .board-settings-box label {
@@ -434,16 +439,17 @@ outline-color: #666;
 }
 
 .board-settings-box input[type="number"] {
-  width: 40px; /* ~в 1.5 раза меньше */
-  padding: 2px 4px;
-  font-size: 10px;
+  width: 50px;
+  padding: 4px 6px;
+  font-size: 13px;
+  line-height: 16px;
 }
 
 .board-settings-box button {
-  padding: 3px 6px;
+  padding: 5px 10px;
   border-radius: 6px;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 /* Кнопка переключения "Редактирование окружения" */
@@ -629,7 +635,7 @@ outline-color: #666;
 /* Строка под журналом: управление + инициатива */
 #action-bottom-row {
   display: flex;
-  gap: 16px;
+  gap: var(--left-gap);
   align-items: flex-start;
 }
 
@@ -711,13 +717,13 @@ outline-color: #666;
 
   border: 1px solid #444;
   border-radius: 4px;
-  padding: 6px 8px;
+  padding: 6px 6px;
   margin-bottom: 6px;
 
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 6px;
+  gap: 8px;
 
   background-color: #1a1a1a;
 }
@@ -843,7 +849,7 @@ outline-color: #666;
 /* ===== Очередность хода (над полем) ===== */
 .turn-order-box{
   width: 100%;
-  max-width: 360px;
+  max-width: none;
   padding: 8px 10px;
   border: 1px solid #444;
   border-radius: 10px;
@@ -2508,7 +2514,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   position: fixed;
   left: 14px;
   bottom: 14px;
-  width: 220px;
+  width: var(--dice-w);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2517,8 +2523,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
 
 .dice-viz{
   position: relative;
-  width: 220px;
-  padding: 7px;
+  width: var(--dice-w);
+  padding: 8px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(20,20,20,0.92);
@@ -2528,16 +2534,16 @@ textarea[data-sheet-path="text.profPlain.value"]{
 
 .dice-viz-title{
   font-weight: 900;
-  font-size: 11px;
-  margin-bottom: 5px;
+  font-size: 12px;
+  margin-bottom: 6px;
 }
 
 .dice-viz-controls{
   display: flex;
   flex-wrap: wrap;            /* разрешаем перенос строки */
-  gap: 6px;
+  gap: 8px;
   align-items: flex-start;     /* чтобы “Инициатива” не тянула высоту */
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 /* Инициатива — отдельной строкой, влезает в рамку */
@@ -2568,8 +2574,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
   outline: none;
 }
 
-.dice-viz-select{ width: 68px; font-size: 11px; padding: 5px 7px; }
-.dice-viz-count{ width: 58px; font-size: 11px; padding: 5px 7px; }
+.dice-viz-select{ width: 72px; font-size: 12px; padding: 6px 8px; }
+.dice-viz-count{ width: 62px; font-size: 12px; padding: 6px 8px; }
 
 /* Кнопка Инициатива — отдельной строкой внутри панели */
 .dice-viz-btn--initiative{
@@ -2585,7 +2591,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   color: #fff;
   padding: 7px 8px;
   font-weight: 900;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -2599,7 +2605,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
 /* Строка броска — строго в одну линию */
 .dice-viz-controls{
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   flex-wrap: nowrap;     /* важно */
 }
@@ -2607,8 +2613,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
 /* Кнопка "Бросить" занимает остаток строки после количества */
 .dice-viz-btn--roll{
   flex: 1 1 auto;
-  min-width: 80px;
-  padding: 6px 8px;     /* компактнее, чтобы точно влезала */
+  min-width: 88px;
+  padding: 7px 10px;     /* чуть компактнее, чтобы точно влезала */
 }
 
 /* ===== Dark dropdown (options list) ===== */
@@ -2657,10 +2663,9 @@ textarea[data-sheet-path="text.profPlain.value"]{
   box-shadow: 0 0 0 2px rgba(255,165,0,0.18);
 }
 
-/* canvas строго внутри панели "Бросок" */
-#dice-viz #dice-canvas{
-  width: 206px;
-  height: 100px;
+#dice-canvas{
+  width: 224px;
+  height: 110px;
   display: block;
   margin: 0 auto;
   border-radius: 12px;
@@ -2673,7 +2678,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   position: relative;
   left: auto;
   bottom: auto;
-  width: 220px;
+  width: var(--dice-w);
   padding: 8px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.14);
@@ -2681,20 +2686,6 @@ textarea[data-sheet-path="text.profPlain.value"]{
   box-shadow: 0 10px 30px rgba(0,0,0,0.55);
   z-index: 9997;
   pointer-events: none;
-}
-
-.dice-others__list{
-  display: flex;
-  flex-direction: column-reverse; /* новые элементы появляются снизу, лента растёт вверх */
-  gap: 6px;
-}
-
-/* список бросков — растёт снизу вверх */
-.dice-others__list{
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 6px;
-  min-height: 26px;
 }
 
 .dice-others.dice-others--inline .dice-others__title{
@@ -2794,7 +2785,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   cursor: pointer;
 }
 
-.dice-panel #dice-canvas{
+#dice-canvas{
   width: 250px;
   height: 170px;
   display: block;
@@ -3014,7 +3005,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   position: fixed;
   left: 300px;      /* legacy fallback (если блок вне стека) */
   bottom: 14px;
-  width: 240px;
+  width: var(--dice-w);
   padding: 10px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.14);
@@ -3029,10 +3020,18 @@ textarea[data-sheet-path="text.profPlain.value"]{
   position: relative;
   left: auto;
   bottom: auto;
-  width: 240px;
+  width: var(--dice-w);
   padding: 8px;
-  max-height: 140px;
+  max-height: 150px;
   overflow: hidden;
+}
+
+.dice-others__list{
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* новые броски снизу */
+  gap: 8px;
+  height: 118px;
 }
 
 .dice-others__title{
@@ -3047,9 +3046,10 @@ textarea[data-sheet-path="text.profPlain.value"]{
   background: rgba(0,0,0,0.18);
   border-radius: 12px;
   padding: 8px 10px;
-  margin-bottom: 8px;
+  margin: 0;
   opacity: .98;
   transition: opacity .9s ease, transform .9s ease;
+  animation: diceRise .18s ease-out;
 }
 
 .dice-others__head{
@@ -3067,7 +3067,12 @@ textarea[data-sheet-path="text.profPlain.value"]{
 
 .dice-others__item.fade{
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateY(-16px);
+}
+
+@keyframes diceRise{
+  from{ opacity: .2; transform: translateY(10px); }
+  to{ opacity: .98; transform: translateY(0); }
 }
 
 /* крит подсветка */
