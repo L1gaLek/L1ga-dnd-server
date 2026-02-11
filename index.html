@@ -193,9 +193,30 @@
             <button id="edit-environment">Редактирование окружения: ВЫКЛ</button>
             <button id="add-wall" disabled>Добавить стену</button>
             <button id="remove-wall" disabled>Удалить стену</button>
+            <div class="env-range-row">
+              <div class="env-range-title">
+                <span>Прозрачность стен</span>
+                <span id="wall-opacity-val">0%</span>
+              </div>
+              <input id="wall-opacity" type="range" min="0" max="100" value="0" />
+            </div>
+
 
             <div class="env-bg-controls">
               <div class="env-bg-title">Подложка карты</div>
+              <div class="env-bg-url-row">
+                <input id="board-bg-url" type="text" placeholder="Ссылка на изображение или GIF (https://...)" />
+                <button id="board-bg-url-apply" type="button">Загрузить</button>
+              </div>
+
+              <div class="env-range-row">
+                <div class="env-range-title">
+                  <span>Прозрачность клеток</span>
+                  <span id="grid-opacity-val">0%</span>
+                </div>
+                <input id="grid-opacity" type="range" min="0" max="100" value="0" />
+              </div>
+
               <input id="board-bg-file" type="file" accept="image/*,.gif" />
               <button id="board-bg-clear" type="button">Убрать подложку</button>
             </div>
