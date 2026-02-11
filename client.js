@@ -2025,16 +2025,17 @@ function ensureStateHasMaps(state) {
     if (!state.currentMapId) state.currentMapId = String(state.maps[0].id || "map-1");
     // ensure new fields exist (bg url + opacities)
     state.maps.forEach((mm) => {
-      if (!mm || typeof mm !== \"object\") return;
-      if (typeof mm.boardBgUrl === \"undefined\") mm.boardBgUrl = null;
-      if (typeof mm.gridOpacity === \"undefined\") mm.gridOpacity = 0.35;
-      if (typeof mm.wallOpacity === \"undefined\") mm.wallOpacity = 1;
+      // IMPORTANT: plain quotes only. Escaped quotes here break the whole script in the browser.
+      if (!mm || typeof mm !== "object") return;
+      if (typeof mm.boardBgUrl === "undefined") mm.boardBgUrl = null;
+      if (typeof mm.gridOpacity === "undefined") mm.gridOpacity = 0.35;
+      if (typeof mm.wallOpacity === "undefined") mm.wallOpacity = 1;
     });
 
     // root mirror defaults (backward compat)
-    if (typeof state.boardBgUrl === \"undefined\") state.boardBgUrl = null;
-    if (typeof state.gridOpacity === \"undefined\") state.gridOpacity = 0.35;
-    if (typeof state.wallOpacity === \"undefined\") state.wallOpacity = 1;
+    if (typeof state.boardBgUrl === "undefined") state.boardBgUrl = null;
+    if (typeof state.gridOpacity === "undefined") state.gridOpacity = 0.35;
+    if (typeof state.wallOpacity === "undefined") state.wallOpacity = 1;
     // ensure sections exist
     if (!Array.isArray(state.mapSections) || !state.mapSections.length) {
       const sid = (crypto?.randomUUID ? crypto.randomUUID() : ("sec-" + Math.random().toString(16).slice(2)));
