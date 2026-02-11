@@ -1374,6 +1374,7 @@ let diceAnimBusy = false;
 
 // ===== Other players dice feed (right of dice panel) =====
 let othersDiceWrap = null;
+let othersDiceList = null;
 
 function ensureOthersDiceUI() {
   if (othersDiceWrap) return othersDiceWrap;
@@ -1385,13 +1386,22 @@ function ensureOthersDiceUI() {
     if (!othersDiceWrap.querySelector('.dice-others__title')) {
       othersDiceWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
     }
+    // список (для направления снизу-вверх)
+    othersDiceList = document.getElementById('dice-others-list') || othersDiceWrap.querySelector('.dice-others__list');
+    if (!othersDiceList) {
+      othersDiceList = document.createElement('div');
+      othersDiceList.id = 'dice-others-list';
+      othersDiceList.className = 'dice-others__list';
+      othersDiceWrap.appendChild(othersDiceList);
+    }
     return othersDiceWrap;
   }
 
   // Fallback: старый вариант (если HTML не обновлён)
   othersDiceWrap = document.createElement("div");
   othersDiceWrap.className = "dice-others";
-  othersDiceWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
+  othersDiceWrap.innerHTML = `<div class="dice-others__title">Броски других</div><div id="dice-others-list" class="dice-others__list"></div>`;
+  othersDiceList = othersDiceWrap.querySelector('#dice-others-list');
   document.body.appendChild(othersDiceWrap);
   return othersDiceWrap;
 }
@@ -1472,7 +1482,9 @@ function pushOtherDiceEvent(ev) {
   if (ev.crit === "crit-fail") item.classList.add("crit-fail");
   if (ev.crit === "crit-success") item.classList.add("crit-success");
 
-  othersDiceWrap.appendChild(item);
+  // Лента растёт снизу вверх: контейнер items = column-reverse,
+  // поэтому добавляем элемент в НАЧАЛО (он окажется снизу).
+  (othersDiceList || othersDiceWrap).prepend(item);
 
   // через 5с — плавное исчезновение
   setTimeout(() => item.classList.add("fade"), 4200);
@@ -1649,11 +1661,9 @@ let diceOthersWrap = null;
 function ensureDiceOthersUI() {
   if (diceOthersWrap) return diceOthersWrap;
 
-  diceOthersWrap = document.createElement('div');
-  diceOthersWrap.className = 'dice-others';
-  diceOthersWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
-  document.body.appendChild(diceOthersWrap);
-
+  // Используем новый UI (inline-блок над панелью "Бросок")
+  ensureOthersDiceUI();
+  diceOthersWrap = (othersDiceList || othersDiceWrap);
   return diceOthersWrap;
 }
 
@@ -1686,7 +1696,8 @@ function pushOtherDice(ev) {
     <div class="dice-others__body">${escapeHtmlLocal(body)}</div>
   `;
 
-  diceOthersWrap.appendChild(item);
+  // См. комментарий выше: column-reverse => добавляем в начало, чтобы появлялось снизу
+  diceOthersWrap.prepend(item);
 
   // затухание и удаление
   setTimeout(() => item.classList.add('fade'), 4200);
