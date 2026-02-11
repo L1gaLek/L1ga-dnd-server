@@ -196,6 +196,13 @@
 
             <div class="env-bg-controls">
               <div class="env-bg-title">Подложка карты</div>
+
+              <!-- Вставить ссылку на картинку / .gif (если сайт разрешает hotlink) -->
+              <div class="env-bg-url-row">
+                <input id="board-bg-url" type="text" placeholder="URL картинки или .gif (https://...)" />
+                <button id="board-bg-url-apply" type="button">Применить URL</button>
+              </div>
+
               <input id="board-bg-file" type="file" accept="image/*,.gif" />
               <button id="board-bg-clear" type="button">Убрать подложку</button>
             </div>
@@ -298,9 +305,9 @@
   window.SUPABASE_FETCH_FN = "fetch";
 </script>
 
-<script src="controlbox.js"></script>
-  <script src="client.js"></script>
+<script src="client.js"></script>
 <script src="info-dnd-player.js" defer></script>
+<script src="controlbox.js"></script>
 
 </body>
 </html>
