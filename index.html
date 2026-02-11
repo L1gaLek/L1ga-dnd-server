@@ -132,6 +132,15 @@
 
           <div id="board-topbar">
 
+            <!-- Очередность хода (видно в фазе инициативы и боя) -->
+            <div id="turn-order-box" class="turn-order-box" style="display:none;">
+              <div class="turn-order-head">
+                <div class="turn-order-title">Очередность хода</div>
+                <div class="turn-order-round">Круг - <span id="turn-order-round">1</span></div>
+              </div>
+              <ul id="turn-order-list" class="turn-order-list"></ul>
+            </div>
+
             <!-- Текущий игрок — по центру поля, над рамками размеров -->
             <div id="current-turn">
               Текущий игрок: <span id="current-player">-</span>
