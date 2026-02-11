@@ -79,6 +79,11 @@ const boardBgClearBtn = document.getElementById('board-bg-clear');
 const boardBgUrlInput = document.getElementById('board-bg-url');
 const boardBgUrlApplyBtn = document.getElementById('board-bg-url-apply');
 
+// Очередность хода (над полем слева)
+const turnOrderBox = document.getElementById('turn-order-box');
+const turnOrderList = document.getElementById('turn-order-list');
+const turnOrderRound = document.getElementById('turn-order-round');
+
 const gridOpacityInput = document.getElementById('grid-opacity');
 const gridOpacityVal = document.getElementById('grid-opacity-val');
 
@@ -754,6 +759,7 @@ loginDiv.style.display = 'none';
       updatePhaseUI(normalized);
       updatePlayerList();
       updateCurrentPlayer(normalized);
+      renderTurnOrderBox(normalized);
       renderLog(normalized.log || []);
 
       // если "Инфа" открыта — обновляем ее по свежему state
@@ -869,6 +875,68 @@ function updateCurrentPlayer(state) {
     nextTurnBtn.disabled = !canNext;
     if (canNext) nextTurnBtn.classList.add('is-active');
   }
+}
+
+// ================== TURN ORDER BOX ==================
+function renderTurnOrderBox(state) {
+  if (!turnOrderBox || !turnOrderList) return;
+  const phase = String(state?.phase || "");
+  const show = (phase === "initiative" || phase === "combat");
+  turnOrderBox.style.display = show ? '' : 'none';
+  if (!show) return;
+
+  const round = Number(state?.round) || 1;
+  if (turnOrderRound) turnOrderRound.textContent = String(round);
+
+  const stPlayers = Array.isArray(state?.players) ? state.players : [];
+
+  let ordered = [];
+  if (phase === "combat" && Array.isArray(state?.turnOrder) && state.turnOrder.length) {
+    ordered = state.turnOrder
+      .map(id => stPlayers.find(p => p && String(p.id) === String(id)))
+      .filter(Boolean);
+  } else {
+    // В фазе инициативы показываем порядок "на лету" по мере бросков
+    const rolled = stPlayers.filter(p => p && p.hasRolledInitiative);
+    const pending = stPlayers.filter(p => p && !p.hasRolledInitiative);
+    rolled.sort((a, b) => (Number(b.initiative) || 0) - (Number(a.initiative) || 0));
+    ordered = [...rolled, ...pending];
+  }
+
+  const currentId = (phase === "combat" && Array.isArray(state?.turnOrder) && state.turnOrder.length)
+    ? state.turnOrder[state.currentTurnIndex]
+    : null;
+
+  turnOrderList.innerHTML = '';
+  ordered.forEach(p => {
+    const li = document.createElement('li');
+    li.className = 'turn-order-item';
+    if (currentId && String(p.id) === String(currentId)) li.classList.add('is-current');
+    if (!p.hasRolledInitiative) li.classList.add('is-pending');
+
+    const left = document.createElement('span');
+    left.textContent = String(p.name || '-');
+    left.style.display = 'inline-flex';
+    left.style.alignItems = 'center';
+    left.style.gap = '6px';
+
+    const dot = document.createElement('span');
+    dot.style.width = '10px';
+    dot.style.height = '10px';
+    dot.style.borderRadius = '999px';
+    dot.style.background = String(p.color || '#888');
+    dot.style.border = '1px solid rgba(255,255,255,0.25)';
+    left.prepend(dot);
+
+    const right = document.createElement('span');
+    const iv = (p.initiative !== null && p.initiative !== undefined) ? p.initiative : null;
+    right.textContent = (p.hasRolledInitiative && Number.isFinite(Number(iv))) ? String(iv) : '—';
+    right.style.opacity = '0.9';
+
+    li.appendChild(left);
+    li.appendChild(right);
+    turnOrderList.appendChild(li);
+  });
 }
 
 function highlightCurrentTurn(playerId) {
@@ -1017,11 +1085,20 @@ function updatePlayerList() {
       const actions = document.createElement('div');
       actions.className = 'player-actions';
 
-      // две строки: сверху кнопки, снизу размер+цвет
-      const topRow = document.createElement('div');
-      topRow.className = 'player-actions-top';
-      const bottomRow = document.createElement('div');
-      bottomRow.className = 'player-actions-bottom';
+      // ===== Верхняя кнопка "Лист персонажа" (на всю ширину карточки) =====
+      const topActions = document.createElement('div');
+      topActions.className = 'player-actions-top';
+      if (!p.isMonster) {
+        const sheetBtn = document.createElement('button');
+        sheetBtn.textContent = 'Лист персонажа';
+        sheetBtn.className = 'sheet-btn';
+        sheetBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.InfoModal?.open?.(p);
+        });
+        topActions.appendChild(sheetBtn);
+      }
+      actions.appendChild(topActions);
 
       // ===== Новый игрок во время боя: выбор инициативы (только для него) =====
       if (lastState && lastState.phase === 'combat' && p.pendingInitiativeChoice && (myRole === 'GM' || p.ownerId === myId)) {
@@ -1050,22 +1127,15 @@ function updatePlayerList() {
 
         box.appendChild(rollInitBtn);
         box.appendChild(baseInitBtn);
-        topRow.appendChild(box);
+        actions.appendChild(box);
       }
 
-      // КНОПКА "Лист персонажа" — теперь вызывает внешний модуль
-      if (p.isBase) {
-        const infoBtn = document.createElement('button');
-        infoBtn.textContent = 'Лист персонажа';
-        infoBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          window.InfoModal?.open?.(p);
-        });
-        topRow.appendChild(infoBtn);
-      }
+      // ===== Ряд управления: размер + цвет =====
+      const midRow = document.createElement('div');
+      midRow.className = 'player-actions-row';
 
-      // изменение размера + цвет (рядом), но визуально НИЖЕ кнопок
       if (myRole === "GM" || p.ownerId === myId) {
+        // размер
         const sizeSelect = document.createElement('select');
         sizeSelect.className = 'size-select';
         for (let s = 1; s <= 5; s++) {
@@ -1080,20 +1150,21 @@ function updatePlayerList() {
           e.stopPropagation();
           sendMessage({ type: 'updatePlayerSize', id: p.id, size: parseInt(sizeSelect.value, 10) });
         });
+        midRow.appendChild(sizeSelect);
 
+        // цвет
         const colorInput = document.createElement('input');
         colorInput.type = 'color';
         colorInput.className = 'player-color-input';
-        colorInput.value = (typeof p.color === 'string' && p.color) ? p.color : '#ff0000';
+        colorInput.value = String(p.color || '#ff0000');
         colorInput.addEventListener('click', (e) => e.stopPropagation());
         colorInput.addEventListener('change', (e) => {
           e.stopPropagation();
           sendMessage({ type: 'updatePlayerColor', id: p.id, color: colorInput.value });
         });
-
-        bottomRow.appendChild(sizeSelect);
-        bottomRow.appendChild(colorInput);
+        midRow.appendChild(colorInput);
       }
+      actions.appendChild(midRow);
 
       li.addEventListener('click', () => {
         selectedPlayer = p;
@@ -1108,9 +1179,13 @@ function updatePlayerList() {
         }
       });
 
+      // ===== Нижний ряд: "С поля" / "Удалить" =====
+      const bottomRow = document.createElement('div');
+      bottomRow.className = 'player-actions-row player-actions-row--bottom';
       if (myRole === "GM" || p.ownerId === myId) {
         const removeFromBoardBtn = document.createElement('button');
         removeFromBoardBtn.textContent = 'С поля';
+        removeFromBoardBtn.classList.add('mini-action-btn');
         removeFromBoardBtn.onclick = (e) => {
           e.stopPropagation();
           sendMessage({ type: 'removePlayerFromBoard', id: p.id });
@@ -1118,16 +1193,15 @@ function updatePlayerList() {
 
         const removeCompletelyBtn = document.createElement('button');
         removeCompletelyBtn.textContent = 'Удалить';
+        removeCompletelyBtn.classList.add('mini-action-btn');
         removeCompletelyBtn.onclick = (e) => {
           e.stopPropagation();
           sendMessage({ type: 'removePlayerCompletely', id: p.id });
         };
 
-        topRow.appendChild(removeFromBoardBtn);
-        topRow.appendChild(removeCompletelyBtn);
+        bottomRow.appendChild(removeFromBoardBtn);
+        bottomRow.appendChild(removeCompletelyBtn);
       }
-
-      actions.appendChild(topRow);
       actions.appendChild(bottomRow);
 
       li.appendChild(actions);
@@ -2075,6 +2149,7 @@ function createInitialGameState() {
     players: [],
     turnOrder: [],
     currentTurnIndex: 0,
+    round: 1,
     log: []
   };
 }
@@ -2250,21 +2325,16 @@ function autoPlacePlayers(state) {
 }
 
 function getDexMod(player) {
+  // Ловкость хранится в листе персонажа (sheet.parsed.stats.dex)
+  // Возможные поля: score / value / modifier / mod
   try {
-    const dex = player?.sheet?.parsed?.stats?.dex?.value;
-    const n = Number(dex);
-    if (!Number.isFinite(n)) return 0;
+    const dexObj = player?.sheet?.parsed?.stats?.dex;
+    const modCandidate = Number(dexObj?.modifier ?? dexObj?.mod);
+    if (Number.isFinite(modCandidate)) return modCandidate;
 
-    // Логика модификаторов (как в навыках/характеристиках в этом проекте):
-    // 10-12 => +0
-    // 13-14 => +1
-    // 15-16 => +2
-    // 8-9   => -1
-    // 6-7   => -2
-    // и т.д.
-    if (n >= 13) return Math.floor((n - 12) / 2);
-    if (n >= 10) return 0;
-    return -Math.floor((11 - n) / 2);
+    const scoreCandidate = Number(dexObj?.score ?? dexObj?.value);
+    if (!Number.isFinite(scoreCandidate)) return 0;
+    return Math.floor((scoreCandidate - 10) / 2);
   } catch {
     return 0;
   }
@@ -2874,6 +2944,9 @@ async function sendMessage(msg) {
         else if (type === "startInitiative") {
           if (!isGM) return;
           next.phase = "initiative";
+          next.turnOrder = [];
+          next.currentTurnIndex = 0;
+          next.round = 1;
           (next.players || []).forEach(p => {
             p.initiative = null;
             p.hasRolledInitiative = false;
@@ -2884,7 +2957,21 @@ async function sendMessage(msg) {
         else if (type === "startExploration") {
           if (!isGM) return;
           next.phase = "exploration";
+          // В исследовании очередь хода не нужна
+          next.turnOrder = [];
+          next.currentTurnIndex = 0;
+          next.round = 1;
           logEventToState(next, "GM начал фазу исследования");
+        }
+
+        else if (type === "updatePlayerColor") {
+          const p = (next.players || []).find(pp => pp.id === msg.id);
+          if (!p) return;
+          if (!isGM && !ownsPlayer(p)) return;
+          const c = String(msg.color || '').trim();
+          if (!/^#[0-9a-fA-F]{6}$/.test(c)) return;
+          p.color = c;
+          logEventToState(next, `${p.name} изменил цвет`);
         }
 
         else if (type === "addPlayer") {
@@ -3029,17 +3116,6 @@ async function sendMessage(msg) {
           }
           p.size = newSize;
           logEventToState(next, `${p.name} изменил размер на ${p.size}x${p.size}`);
-        }
-
-        else if (type === "updatePlayerColor") {
-          const p = (next.players || []).find(pp => pp.id === msg.id);
-          if (!p) return;
-          if (!isGM && !ownsPlayer(p)) return;
-          const color = String(msg.color || "").trim();
-          // Простой валидатор hex-цвета
-          if (!/^#([0-9a-fA-F]{6})$/.test(color)) return;
-          p.color = color;
-          logEventToState(next, `${p.name} изменил цвет`);
         }
 
         else if (type === "removePlayerFromBoard") {
@@ -3189,6 +3265,7 @@ else if (type === "addWall") {
           autoPlacePlayers(next);
           next.phase = "combat";
           next.currentTurnIndex = 0;
+          next.round = 1;
           const firstId = next.turnOrder[0];
           const first = (next.players || []).find(p => p.id === firstId);
           logEventToState(next, `Бой начался. Первый ход: ${first?.name || '-'}`);
@@ -3206,6 +3283,7 @@ else if (type === "addWall") {
           const nextIndex = (next.currentTurnIndex + 1) % next.turnOrder.length;
           const wrapped = (prevIndex === next.turnOrder.length - 1 && nextIndex === 0);
           if (wrapped) {
+            next.round = (Number(next.round) || 1) + 1;
             const toJoin = (next.players || []).filter(p => p && p.willJoinNextRound);
             if (toJoin.length) {
               toJoin.forEach(p => { p.willJoinNextRound = false; });
