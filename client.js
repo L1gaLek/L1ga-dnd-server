@@ -75,6 +75,17 @@ const boardBgEl = document.getElementById('board-bg');
 const boardBgFileInput = document.getElementById('board-bg-file');
 const boardBgClearBtn = document.getElementById('board-bg-clear');
 
+// ===== Подложка по ссылке + прозрачности (GM) =====
+const boardBgUrlInput = document.getElementById('board-bg-url');
+const boardBgUrlApplyBtn = document.getElementById('board-bg-url-apply');
+
+const gridOpacityInput = document.getElementById('grid-opacity');
+const gridOpacityVal = document.getElementById('grid-opacity-val');
+
+const wallOpacityInput = document.getElementById('wall-opacity');
+const wallOpacityVal = document.getElementById('wall-opacity-val');
+
+
 // ===== Карты кампании (ГМ) =====
 const campaignMapsSelect = document.getElementById('campaign-maps-select');
 const createCampaignMapBtn = document.getElementById('create-campaign-map');
@@ -273,6 +284,55 @@ if (boardBgClearBtn) {
   });
 }
 
+// Подложка по ссылке (https://...jpg/png/gif/webp)
+if (boardBgUrlApplyBtn) {
+  boardBgUrlApplyBtn.addEventListener('click', async () => {
+    if (!isGM()) return;
+    const url = String(boardBgUrlInput?.value || "").trim();
+    if (!url) return;
+    // простая проверка; фон станет виден на всех клиентах, если URL доступен браузеру
+    if (!/^https?:\/\//i.test(url) && !/^data:/i.test(url)) {
+      alert("Ссылка должна начинаться с http(s):// (или data:)");
+      return;
+    }
+    await sendMessage({ type: 'setBoardBg', dataUrl: url });
+  });
+}
+
+// Прозрачность клеток/стен (0% = как обычно, 100% = невидимо)
+function pctToAlpha(pct) {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  return 1 - (p / 100);
+}
+
+if (gridOpacityInput) {
+  const onGrid = async () => {
+    if (!isGM()) return;
+    const pct = Number(gridOpacityInput.value) || 0;
+    if (gridOpacityVal) gridOpacityVal.textContent = `${pct}%`;
+    await sendMessage({ type: 'setGridAlpha', alpha: pctToAlpha(pct) });
+  };
+  gridOpacityInput.addEventListener('input', () => {
+    const pct = Number(gridOpacityInput.value) || 0;
+    if (gridOpacityVal) gridOpacityVal.textContent = `${pct}%`;
+  });
+  gridOpacityInput.addEventListener('change', onGrid);
+}
+
+if (wallOpacityInput) {
+  const onWall = async () => {
+    if (!isGM()) return;
+    const pct = Number(wallOpacityInput.value) || 0;
+    if (wallOpacityVal) wallOpacityVal.textContent = `${pct}%`;
+    await sendMessage({ type: 'setWallAlpha', alpha: pctToAlpha(pct) });
+  };
+  wallOpacityInput.addEventListener('input', () => {
+    const pct = Number(wallOpacityInput.value) || 0;
+    if (wallOpacityVal) wallOpacityVal.textContent = `${pct}%`;
+  });
+  wallOpacityInput.addEventListener('change', onWall);
+}
+
 function applyBoardBackgroundToDom(state) {
   // гарантируем наличие слоя подложки (на случай старого HTML)
   let bg = boardBgEl || document.getElementById('board-bg');
@@ -295,6 +355,33 @@ function applyBoardBackgroundToDom(state) {
   bg.style.height = `${bh * 50}px`;
   board.classList.toggle('has-bg', !!dataUrl);
 }
+
+function clamp01(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  return Math.max(0, Math.min(1, x));
+}
+
+function applyOpacityToDom(state) {
+  if (!board) return;
+  const gridA = (state && typeof state.gridAlpha !== "undefined") ? clamp01(state.gridAlpha) : null;
+  const wallA = (state && typeof state.wallAlpha !== "undefined") ? clamp01(state.wallAlpha) : null;
+
+  if (gridA === null) board.style.removeProperty('--grid-alpha');
+  else board.style.setProperty('--grid-alpha', String(gridA));
+
+  if (wallA === null) board.style.removeProperty('--wall-alpha');
+  else board.style.setProperty('--wall-alpha', String(wallA));
+
+  // sync UI (percent where 0% = fully visible, 100% = invisible)
+  const toPct = (a) => Math.round((1 - clamp01(a)) * 100);
+  if (gridOpacityInput) gridOpacityInput.value = String(gridA === null ? 0 : toPct(gridA));
+  if (gridOpacityVal) gridOpacityVal.textContent = `${gridA === null ? 0 : toPct(gridA)}%`;
+
+  if (wallOpacityInput) wallOpacityInput.value = String(wallA === null ? 0 : toPct(wallA));
+  if (wallOpacityVal) wallOpacityVal.textContent = `${wallA === null ? 0 : toPct(wallA)}%`;
+}
+
 
 // ================== CAMPAIGN MAPS UI HOOKS (GM) ==================
 // Основное управление картами/разделами теперь находится в controlbox.js (окно «Параметры»).
@@ -1026,6 +1113,7 @@ function renderBoard(state) {
 
   // Подложка должна растягиваться на весь размер поля (а не на 1 клетку)
   applyBoardBackgroundToDom(state);
+  applyOpacityToDom(state);
 
   for (let y = 0; y < boardHeight; y++) {
     for (let x = 0; x < boardWidth; x++) {
@@ -1925,6 +2013,8 @@ function createInitialGameState() {
     boardWidth: 10,
     boardHeight: 10,
     boardBgDataUrl: null,
+    gridAlpha: 1,
+    wallAlpha: 1,
     walls: [],
     playersPos: {} // playerId -> {x,y}
   };
@@ -1980,6 +2070,8 @@ function ensureStateHasMaps(state) {
     boardWidth: Number(state.boardWidth) || 10,
     boardHeight: Number(state.boardHeight) || 10,
     boardBgDataUrl: state.boardBgDataUrl || null,
+    gridAlpha: (typeof state.gridAlpha !== 'undefined') ? state.gridAlpha : 1,
+    wallAlpha: (typeof state.wallAlpha !== 'undefined') ? state.wallAlpha : 1,
     walls: Array.isArray(state.walls) ? state.walls : [],
     playersPos: {}
   };
@@ -1999,6 +2091,8 @@ function ensureStateHasMaps(state) {
   state.boardWidth = migratedMap.boardWidth;
   state.boardHeight = migratedMap.boardHeight;
   state.boardBgDataUrl = migratedMap.boardBgDataUrl;
+  state.gridAlpha = migratedMap.gridAlpha ?? 1;
+  state.wallAlpha = migratedMap.wallAlpha ?? 1;
   state.walls = migratedMap.walls;
 
   return state;
@@ -2019,6 +2113,9 @@ function syncActiveToMap(state) {
   m.boardWidth = Number(st.boardWidth) || 10;
   m.boardHeight = Number(st.boardHeight) || 10;
   m.boardBgDataUrl = st.boardBgDataUrl || null;
+  m.gridAlpha = (typeof st.gridAlpha !== 'undefined') ? st.gridAlpha : 1;
+  m.wallAlpha = (typeof st.wallAlpha !== 'undefined') ? st.wallAlpha : 1;
+
   m.walls = Array.isArray(st.walls) ? st.walls : [];
 
   // capture positions from root players into map snapshot
@@ -2045,6 +2142,9 @@ function loadMapToRoot(state, mapId) {
   st.boardWidth = Number(m.boardWidth) || 10;
   st.boardHeight = Number(m.boardHeight) || 10;
   st.boardBgDataUrl = m.boardBgDataUrl || null;
+  st.gridAlpha = (typeof m.gridAlpha !== 'undefined') ? m.gridAlpha : 1;
+  st.wallAlpha = (typeof m.wallAlpha !== 'undefined') ? m.wallAlpha : 1;
+
   st.walls = Array.isArray(m.walls) ? m.walls : [];
 
   // apply stored positions for this map
@@ -2682,6 +2782,8 @@ async function sendMessage(msg) {
             boardWidth: 10,
             boardHeight: 10,
             boardBgDataUrl: null,
+            gridAlpha: 1,
+            wallAlpha: 1,
             walls: [],
             playersPos: {}
           });
@@ -2902,6 +3004,21 @@ else if (type === "addWall") {
           next.boardBgDataUrl = null;
           logEventToState(next, "Подложка карты очищена");
         }
+
+        else if (type === "setGridAlpha") {
+          if (!isGM) return;
+          const a = Number(msg.alpha);
+          next.gridAlpha = Number.isFinite(a) ? clamp(a, 0, 1) : 1;
+          logEventToState(next, `Прозрачность клеток: ${Math.round((1 - next.gridAlpha) * 100)}%`);
+        }
+
+        else if (type === "setWallAlpha") {
+          if (!isGM) return;
+          const a = Number(msg.alpha);
+          next.wallAlpha = Number.isFinite(a) ? clamp(a, 0, 1) : 1;
+          logEventToState(next, `Прозрачность стен: ${Math.round((1 - next.wallAlpha) * 100)}%`);
+        }
+
 
         else if (type === "rollInitiative") {
           if (next.phase !== "initiative") return;
