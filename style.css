@@ -23,7 +23,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: 540px; /* ширина под 2 карточки */
+  width: 600px; /* ширина под управление + список/очередность */
 }
 
 #content-row {
@@ -54,14 +54,23 @@ body {
 }
 
 #player-management {
-  width: 240px;
+  width: 210px;
   max-height: 260px;
+  overflow-x: hidden; /* без горизонтального ползунка */
 }
 
 #player-list-container {
-  width: 260px;
+  width: 330px;
   max-height: 360px;
   overflow-x: hidden;
+}
+
+/* Стек справа под журналом: список игроков + очередь (ниже) */
+#player-side-stack{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 330px;
 }
 
 /* ===== Управление игроками — компактная сетка без переносов кнопки ===== */
@@ -70,6 +79,20 @@ body {
   grid-template-columns: 1fr auto;
   gap: 6px;
   align-items: center;
+}
+
+/* чтобы элементы не вылезали и не раздвигали рамку */
+#player-management #player-controls input,
+#player-management #player-controls select,
+#player-management #player-controls button{
+  min-width: 0;
+  max-width: 100%;
+}
+
+#player-management #player-controls input[type="color"]{
+  padding: 0;
+  width: 34px;
+  height: 28px;
 }
 
 #player-management #player-controls input[type="text"]{
@@ -144,7 +167,7 @@ body {
 /* Ряд рамок размеров (персональная рамка + GM-карта) */
 .board-settings-row{
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* в один ряд */
   gap: 10px;
   justify-content: center;
   align-items: flex-start;
@@ -152,15 +175,21 @@ body {
 }
 
 .board-settings-box{
-  min-width: 240px;
+  min-width: 320px;
 }
 
 .board-settings-box label{
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .board-settings-box input[type="number"]{
+  font-size: 15px;
+  padding: 6px 8px;
+}
+
+.board-settings-box button{
   font-size: 14px;
+  padding: 6px 10px;
 }
 
 button, input, select {
@@ -2479,7 +2508,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   position: fixed;
   left: 14px;
   bottom: 14px;
-  width: 240px;
+  width: 220px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2488,8 +2517,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
 
 .dice-viz{
   position: relative;
-  width: 240px;
-  padding: 8px;
+  width: 220px;
+  padding: 7px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(20,20,20,0.92);
@@ -2499,16 +2528,16 @@ textarea[data-sheet-path="text.profPlain.value"]{
 
 .dice-viz-title{
   font-weight: 900;
-  font-size: 12px;
-  margin-bottom: 6px;
+  font-size: 11px;
+  margin-bottom: 5px;
 }
 
 .dice-viz-controls{
   display: flex;
   flex-wrap: wrap;            /* разрешаем перенос строки */
-  gap: 8px;
+  gap: 6px;
   align-items: flex-start;     /* чтобы “Инициатива” не тянула высоту */
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 /* Инициатива — отдельной строкой, влезает в рамку */
@@ -2539,8 +2568,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
   outline: none;
 }
 
-.dice-viz-select{ width: 72px; font-size: 12px; padding: 6px 8px; }
-.dice-viz-count{ width: 62px; font-size: 12px; padding: 6px 8px; }
+.dice-viz-select{ width: 68px; font-size: 11px; padding: 5px 7px; }
+.dice-viz-count{ width: 58px; font-size: 11px; padding: 5px 7px; }
 
 /* Кнопка Инициатива — отдельной строкой внутри панели */
 .dice-viz-btn--initiative{
@@ -2556,7 +2585,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   color: #fff;
   padding: 7px 8px;
   font-weight: 900;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
 }
 
@@ -2570,7 +2599,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
 /* Строка броска — строго в одну линию */
 .dice-viz-controls{
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-wrap: nowrap;     /* важно */
 }
@@ -2578,8 +2607,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
 /* Кнопка "Бросить" занимает остаток строки после количества */
 .dice-viz-btn--roll{
   flex: 1 1 auto;
-  min-width: 88px;
-  padding: 7px 10px;     /* чуть компактнее, чтобы точно влезала */
+  min-width: 80px;
+  padding: 6px 8px;     /* компактнее, чтобы точно влезала */
 }
 
 /* ===== Dark dropdown (options list) ===== */
@@ -2628,9 +2657,10 @@ textarea[data-sheet-path="text.profPlain.value"]{
   box-shadow: 0 0 0 2px rgba(255,165,0,0.18);
 }
 
-#dice-canvas{
-  width: 224px;
-  height: 110px;
+/* canvas строго внутри панели "Бросок" */
+#dice-viz #dice-canvas{
+  width: 206px;
+  height: 100px;
   display: block;
   margin: 0 auto;
   border-radius: 12px;
@@ -2643,7 +2673,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   position: relative;
   left: auto;
   bottom: auto;
-  width: 240px;
+  width: 220px;
   padding: 8px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.14);
@@ -2651,6 +2681,20 @@ textarea[data-sheet-path="text.profPlain.value"]{
   box-shadow: 0 10px 30px rgba(0,0,0,0.55);
   z-index: 9997;
   pointer-events: none;
+}
+
+.dice-others__list{
+  display: flex;
+  flex-direction: column-reverse; /* новые элементы появляются снизу, лента растёт вверх */
+  gap: 6px;
+}
+
+/* список бросков — растёт снизу вверх */
+.dice-others__list{
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
+  min-height: 26px;
 }
 
 .dice-others.dice-others--inline .dice-others__title{
@@ -2750,7 +2794,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   cursor: pointer;
 }
 
-#dice-canvas{
+.dice-panel #dice-canvas{
   width: 250px;
   height: 170px;
   display: block;
