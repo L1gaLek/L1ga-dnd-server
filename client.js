@@ -74,14 +74,6 @@ const boardBgEl = document.getElementById('board-bg');
 const boardBgFileInput = document.getElementById('board-bg-file');
 const boardBgClearBtn = document.getElementById('board-bg-clear');
 
-// Подложка по ссылке + прозрачность сетки/стен (ГМ)
-const boardBgUrlInput = document.getElementById('board-bg-url');
-const boardBgUrlApplyBtn = document.getElementById('board-bg-url-apply');
-const gridOpacityInput = document.getElementById('grid-opacity');
-const gridOpacityVal = document.getElementById('grid-opacity-val');
-const wallOpacityInput = document.getElementById('wall-opacity');
-const wallOpacityVal = document.getElementById('wall-opacity-val');
-
 // ===== Карты кампании (ГМ) =====
 const campaignMapsSelect = document.getElementById('campaign-maps-select');
 const createCampaignMapBtn = document.getElementById('create-campaign-map');
@@ -226,74 +218,6 @@ if (boardBgClearBtn) {
   });
 }
 
-// Подложка по ссылке (картинка / gif)
-let _bgUrlLast = "";
-if (boardBgUrlApplyBtn && boardBgUrlInput) {
-  const apply = async () => {
-    if (!isGM()) return;
-    const url = String(boardBgUrlInput.value || "").trim();
-    if (!url) return;
-
-    // базовая валидация (разрешаем https/http и data:)
-    const ok = /^(https?:\/\/|data:image\/)\S+$/i.test(url);
-    if (!ok) {
-      alert('Некорректная ссылка. Используйте http(s)://... или data:image/... ');
-      return;
-    }
-
-    if (url === _bgUrlLast) return;
-    _bgUrlLast = url;
-    await sendMessage({ type: 'setBoardBgUrl', url });
-  };
-
-  boardBgUrlApplyBtn.addEventListener('click', apply);
-  boardBgUrlInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') apply();
-  });
-}
-
-// Прозрачность сетки / стен (ползунки)
-let _gridOpacityTimer = null;
-let _wallOpacityTimer = null;
-
-function setRangeLabel(rangeEl, labelEl){
-  if (!rangeEl || !labelEl) return;
-  labelEl.textContent = `${rangeEl.value}%`;
-}
-
-if (gridOpacityInput) {
-  const onGrid = () => {
-    setRangeLabel(gridOpacityInput, gridOpacityVal);
-    // локальный превью
-    const a = clamp(Number(gridOpacityInput.value) / 100, 0, 1);
-    board?.style?.setProperty('--grid-alpha', String(a));
-
-    if (!isGM()) return;
-    clearTimeout(_gridOpacityTimer);
-    _gridOpacityTimer = setTimeout(() => {
-      sendMessage({ type: 'setGridOpacity', value: a });
-    }, 180);
-  };
-  gridOpacityInput.addEventListener('input', onGrid);
-  gridOpacityInput.addEventListener('change', onGrid);
-}
-
-if (wallOpacityInput) {
-  const onWall = () => {
-    setRangeLabel(wallOpacityInput, wallOpacityVal);
-    const a = clamp(Number(wallOpacityInput.value) / 100, 0, 1);
-    board?.style?.setProperty('--wall-alpha', String(a));
-
-    if (!isGM()) return;
-    clearTimeout(_wallOpacityTimer);
-    _wallOpacityTimer = setTimeout(() => {
-      sendMessage({ type: 'setWallOpacity', value: a });
-    }, 180);
-  };
-  wallOpacityInput.addEventListener('input', onWall);
-  wallOpacityInput.addEventListener('change', onWall);
-}
-
 function applyBoardBackgroundToDom(state) {
   // гарантируем наличие слоя подложки (на случай старого HTML)
   let bg = boardBgEl || document.getElementById('board-bg');
@@ -307,61 +231,14 @@ function applyBoardBackgroundToDom(state) {
   if (!bg || !board) return;
 
   const dataUrl = state?.boardBgDataUrl || null;
-  const url = state?.boardBgUrl || null;
-  const bgSrc = dataUrl || url || null;
-
-  bg.style.backgroundImage = bgSrc ? `url(${bgSrc})` : 'none';
+  bg.style.backgroundImage = dataUrl ? `url(${dataUrl})` : 'none';
 
   // Важно: размеры берем из актуального состояния, а не из глобальных переменных
   const bw = Number(state?.boardWidth) || 10;
   const bh = Number(state?.boardHeight) || 10;
   bg.style.width = `${bw * 50}px`;
   bg.style.height = `${bh * 50}px`;
-  board.classList.toggle('has-bg', !!bgSrc);
-}
-
-function hasBoardBg(state){
-  return !!(state?.boardBgDataUrl || state?.boardBgUrl);
-}
-
-function applyGridOpacityToDom(state){
-  if (!board) return;
-  const hasBg = hasBoardBg(state);
-  const alpha = hasBg ? clamp(Number(state?.gridOpacity), 0, 1) : 1;
-  const a = Number.isFinite(alpha) ? alpha : (hasBg ? 0.35 : 1);
-  board.style.setProperty('--grid-alpha', String(a));
-}
-
-function applyWallOpacityToDom(state){
-  if (!board) return;
-  const alpha = clamp(Number(state?.wallOpacity), 0, 1);
-  const a = Number.isFinite(alpha) ? alpha : 1;
-  board.style.setProperty('--wall-alpha', String(a));
-}
-
-function syncOpacityControlsFromState(state){
-  // обновляем ползунки/подписи (если HTML еще старый — элементы могут отсутствовать)
-  try{
-    const go = hasBoardBg(state) ? clamp(Number(state?.gridOpacity), 0, 1) : 0.35;
-    const wo = clamp(Number(state?.wallOpacity), 0, 1);
-
-    if (gridOpacityInput){
-      const val = Math.round((Number.isFinite(go) ? go : 0.35) * 100);
-      gridOpacityInput.value = String(val);
-    }
-    if (gridOpacityVal){
-      const val = gridOpacityInput ? Number(gridOpacityInput.value) : Math.round((Number.isFinite(go) ? go : 0.35) * 100);
-      gridOpacityVal.textContent = `${val}%`;
-    }
-    if (wallOpacityInput){
-      const val = Math.round((Number.isFinite(wo) ? wo : 1) * 100);
-      wallOpacityInput.value = String(val);
-    }
-    if (wallOpacityVal){
-      const val = wallOpacityInput ? Number(wallOpacityInput.value) : Math.round((Number.isFinite(wo) ? wo : 1) * 100);
-      wallOpacityVal.textContent = `${val}%`;
-    }
-  } catch {}
+  board.classList.toggle('has-bg', !!dataUrl);
 }
 
 // ================== CAMPAIGN MAPS UI HOOKS (GM) ==================
@@ -470,8 +347,10 @@ window.addEventListener("beforeunload", () => {
 
 let players = [];
 let lastState = null;
-let boardWidth = parseInt(boardWidthInput.value, 10) || 10;
-let boardHeight = parseInt(boardHeightInput.value, 10) || 10;
+// Некоторые элементы могут отсутствовать/переименоваться при правках верстки.
+// Если здесь упасть с TypeError, то не навесятся обработчики (и на телефоне будет выглядеть как «ничего не происходит»).
+let boardWidth = parseInt(boardWidthInput?.value, 10) || 10;
+let boardHeight = parseInt(boardHeightInput?.value, 10) || 10;
 
 let selectedPlayer = null;
 let editEnvironment = false;
@@ -495,42 +374,49 @@ const userMissingTicks = new Map(); // userId -> missing polls count
 if (diceViz) diceViz.style.display = 'none';
 
 // ================== JOIN GAME ==================
-joinBtn.addEventListener('click', () => {
-  const name = usernameInput.value.trim();
-  const role = roleSelect.value;
+if (joinBtn) joinBtn.addEventListener('click', () => {
+  try {
+    const name = String(usernameInput?.value || '').trim();
+    const role = String(roleSelect?.value || '');
 
-  if (!name) {
-    loginError.textContent = "Введите имя";
-    return;
-  }
+    if (!name) {
+      if (loginError) loginError.textContent = "Введите имя";
+      return;
+    }
 
   // ===== Supabase init (GitHub Pages) =====
-  if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
-    loginError.textContent = "Supabase не настроен. Проверьте SUPABASE_URL и SUPABASE_ANON_KEY в index.html";
-    return;
-  }
+    if (!window.supabase || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+      if (loginError) loginError.textContent = "Supabase не настроен. Проверьте SUPABASE_URL и SUPABASE_ANON_KEY в index.html";
+      return;
+    }
 
-sbClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    sbClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
-window.SUPABASE_FETCH_FN = "fetch";
+    window.SUPABASE_FETCH_FN = "fetch";
   
-  // stable identity (doesn't depend on nickname)
-  const savedUserId = localStorage.getItem("dnd_user_id") || "";
-  const userId = savedUserId || ("xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  }));
+    // stable identity (doesn't depend on nickname)
+    const savedUserId = localStorage.getItem("dnd_user_id") || "";
+    const userId = savedUserId || ("xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    }));
 
-  localStorage.setItem("dnd_user_id", String(userId));
-  localStorage.setItem("dnd_user_name", String(name));
-  localStorage.setItem("dnd_user_role", String(role || ""));
+    localStorage.setItem("dnd_user_id", String(userId));
+    localStorage.setItem("dnd_user_name", String(name));
+    localStorage.setItem("dnd_user_role", String(role || ""));
 
-  // In Supabase-MVP our "myId" is stable localStorage userId
-  handleMessage({ type: "registered", id: userId, name, role });
+    // In Supabase-MVP our "myId" is stable localStorage userId
+    handleMessage({ type: "registered", id: userId, name, role });
 
-  // list rooms from DB
-  sendMessage({ type: 'listRooms' });
+    // list rooms from DB
+    sendMessage({ type: 'listRooms' });
+  } catch (err) {
+    console.error(err);
+    if (loginError) loginError.textContent = 'Ошибка входа. Проверьте интернет/настройки Supabase.';
+    // На телефоне без консоли — хотя бы покажем что-то
+    try { alert('Ошибка входа. Проверьте интернет/настройки Supabase.'); } catch {}
+  }
 });
 
 // ================== MESSAGE HANDLER (used by Supabase subscriptions) ==================
@@ -560,8 +446,8 @@ if (msg.type === "registered") {
       localStorage.setItem("dnd_user_role", String(msg.role || ""));
       localStorage.setItem("dnd_user_name", String(msg.name || ""));
 myRole = msg.role;
-      myNameSpan.textContent = msg.name;
-      myRoleSpan.textContent = msg.role;
+      if (myNameSpan) myNameSpan.textContent = msg.name;
+      if (myRoleSpan) myRoleSpan.textContent = msg.role;
       myRole = String(msg.role || "");
 
       
@@ -572,10 +458,10 @@ myRole = msg.role;
       if (diceViz) diceViz.style.display = 'none';
       if (myRoomSpan) myRoomSpan.textContent = '-';
       if (myScenarioSpan) myScenarioSpan.textContent = '-';
-loginDiv.style.display = 'none';
-      roomsDiv.style.display = 'block';
-      gameUI.style.display = 'none';
-      roomsError.textContent = '';
+      if (loginDiv) loginDiv.style.display = 'none';
+      if (roomsDiv) roomsDiv.style.display = 'block';
+      if (gameUI) gameUI.style.display = 'none';
+      if (roomsError) roomsError.textContent = '';
       sendMessage({ type: 'listRooms' });
 
       applyRoleToUI();
@@ -1094,9 +980,6 @@ function renderBoard(state) {
 
   // Подложка должна растягиваться на весь размер поля (а не на 1 клетку)
   applyBoardBackgroundToDom(state);
-  applyGridOpacityToDom(state);
-  applyWallOpacityToDom(state);
-  syncOpacityControlsFromState(state);
 
   for (let y = 0; y < boardHeight; y++) {
     for (let x = 0; x < boardWidth; x++) {
@@ -1984,9 +1867,6 @@ function createInitialGameState() {
     boardWidth: 10,
     boardHeight: 10,
     boardBgDataUrl: null,
-    boardBgUrl: null,
-    gridOpacity: 0.35,
-    wallOpacity: 1,
     walls: [],
     playersPos: {} // playerId -> {x,y}
   };
@@ -2002,9 +1882,6 @@ function createInitialGameState() {
     boardWidth: base.boardWidth,
     boardHeight: base.boardHeight,
     boardBgDataUrl: base.boardBgDataUrl,
-    boardBgUrl: base.boardBgUrl,
-    gridOpacity: base.gridOpacity,
-    wallOpacity: base.wallOpacity,
     walls: base.walls,
 
     phase: "lobby",
@@ -2021,18 +1898,6 @@ function ensureStateHasMaps(state) {
   // already new schema
   if (Array.isArray(state.maps) && state.maps.length) {
     if (!state.currentMapId) state.currentMapId = String(state.maps[0].id || "map-1");
-    // ensure new fields exist (bg url + opacities)
-    state.maps.forEach((mm) => {
-      if (!mm || typeof mm !== \"object\") return;
-      if (typeof mm.boardBgUrl === \"undefined\") mm.boardBgUrl = null;
-      if (typeof mm.gridOpacity === \"undefined\") mm.gridOpacity = 0.35;
-      if (typeof mm.wallOpacity === \"undefined\") mm.wallOpacity = 1;
-    });
-
-    // root mirror defaults (backward compat)
-    if (typeof state.boardBgUrl === \"undefined\") state.boardBgUrl = null;
-    if (typeof state.gridOpacity === \"undefined\") state.gridOpacity = 0.35;
-    if (typeof state.wallOpacity === \"undefined\") state.wallOpacity = 1;
     // ensure sections exist
     if (!Array.isArray(state.mapSections) || !state.mapSections.length) {
       const sid = (crypto?.randomUUID ? crypto.randomUUID() : ("sec-" + Math.random().toString(16).slice(2)));
@@ -2057,9 +1922,6 @@ function ensureStateHasMaps(state) {
     boardWidth: Number(state.boardWidth) || 10,
     boardHeight: Number(state.boardHeight) || 10,
     boardBgDataUrl: state.boardBgDataUrl || null,
-    boardBgUrl: state.boardBgUrl || null,
-    gridOpacity: (typeof state.gridOpacity !== "undefined") ? Number(state.gridOpacity) : 0.35,
-    wallOpacity: (typeof state.wallOpacity !== "undefined") ? Number(state.wallOpacity) : 1,
     walls: Array.isArray(state.walls) ? state.walls : [],
     playersPos: {}
   };
@@ -2079,9 +1941,6 @@ function ensureStateHasMaps(state) {
   state.boardWidth = migratedMap.boardWidth;
   state.boardHeight = migratedMap.boardHeight;
   state.boardBgDataUrl = migratedMap.boardBgDataUrl;
-  state.boardBgUrl = migratedMap.boardBgUrl;
-  state.gridOpacity = migratedMap.gridOpacity;
-  state.wallOpacity = migratedMap.wallOpacity;
   state.walls = migratedMap.walls;
 
   return state;
@@ -2102,9 +1961,6 @@ function syncActiveToMap(state) {
   m.boardWidth = Number(st.boardWidth) || 10;
   m.boardHeight = Number(st.boardHeight) || 10;
   m.boardBgDataUrl = st.boardBgDataUrl || null;
-  m.boardBgUrl = st.boardBgUrl || null;
-  m.gridOpacity = (typeof st.gridOpacity !== "undefined") ? Number(st.gridOpacity) : 0.35;
-  m.wallOpacity = (typeof st.wallOpacity !== "undefined") ? Number(st.wallOpacity) : 1;
   m.walls = Array.isArray(st.walls) ? st.walls : [];
 
   // capture positions from root players into map snapshot
@@ -2131,9 +1987,6 @@ function loadMapToRoot(state, mapId) {
   st.boardWidth = Number(m.boardWidth) || 10;
   st.boardHeight = Number(m.boardHeight) || 10;
   st.boardBgDataUrl = m.boardBgDataUrl || null;
-  st.boardBgUrl = m.boardBgUrl || null;
-  st.gridOpacity = (typeof m.gridOpacity !== "undefined") ? Number(m.gridOpacity) : 0.35;
-  st.wallOpacity = (typeof m.wallOpacity !== "undefined") ? Number(m.wallOpacity) : 1;
   st.walls = Array.isArray(m.walls) ? m.walls : [];
 
   // apply stored positions for this map
@@ -2980,37 +2833,13 @@ else if (type === "addWall") {
           if (!isGM) return;
           const dataUrl = String(msg.dataUrl || "").trim();
           next.boardBgDataUrl = dataUrl ? dataUrl : null;
-          next.boardBgUrl = null; // если загрузили файл — ссылка больше не актуальна
           logEventToState(next, next.boardBgDataUrl ? "Подложка карты загружена" : "Подложка карты очищена");
-        }
-
-        else if (type === "setBoardBgUrl") {
-          if (!isGM) return;
-          const url = String(msg.url || "").trim();
-          next.boardBgUrl = url ? url : null;
-          next.boardBgDataUrl = null; // если загрузили ссылку — dataUrl больше не актуален
-          logEventToState(next, next.boardBgUrl ? "Подложка карты загружена (ссылка)" : "Подложка карты очищена");
         }
 
         else if (type === "clearBoardBg") {
           if (!isGM) return;
           next.boardBgDataUrl = null;
-          next.boardBgUrl = null;
           logEventToState(next, "Подложка карты очищена");
-        }
-
-        else if (type === "setGridOpacity") {
-          if (!isGM) return;
-          const a = clamp(Number(msg.value), 0, 1);
-          next.gridOpacity = Number.isFinite(a) ? a : 0.35;
-          // не спамим лог при каждом тике ползунка
-        }
-
-        else if (type === "setWallOpacity") {
-          if (!isGM) return;
-          const a = clamp(Number(msg.value), 0, 1);
-          next.wallOpacity = Number.isFinite(a) ? a : 1;
-          // не спамим лог при каждом тике ползунка
         }
 
         else if (type === "rollInitiative") {
