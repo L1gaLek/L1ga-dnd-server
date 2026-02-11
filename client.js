@@ -1178,10 +1178,7 @@ function updatePlayerList() {
           sendMessage({ type: 'movePlayer', id: p.id, x: spot.x, y: spot.y });
         }
       });
-
-      // ===== Нижний ряд: "С поля" / "Удалить" =====
-      const bottomRow = document.createElement('div');
-      bottomRow.className = 'player-actions-row player-actions-row--bottom';
+      // ===== "С поля" / "Удалить" — в том же ряду, что размер и цвет =====
       if (myRole === "GM" || p.ownerId === myId) {
         const removeFromBoardBtn = document.createElement('button');
         removeFromBoardBtn.textContent = 'С поля';
@@ -1199,12 +1196,11 @@ function updatePlayerList() {
           sendMessage({ type: 'removePlayerCompletely', id: p.id });
         };
 
-        bottomRow.appendChild(removeFromBoardBtn);
-        bottomRow.appendChild(removeCompletelyBtn);
+        // midRow уже создан выше
+        midRow.appendChild(removeFromBoardBtn);
+        midRow.appendChild(removeCompletelyBtn);
       }
-      actions.appendChild(bottomRow);
-
-      li.appendChild(actions);
+li.appendChild(actions);
       ul.appendChild(li);
     });
 
@@ -1376,10 +1372,23 @@ let othersDiceWrap = null;
 function ensureOthersDiceUI() {
   if (othersDiceWrap) return othersDiceWrap;
 
+  // Prefer static placeholder above the main dice panel (index.html provides it)
+  const existing = document.getElementById("dice-others");
+  if (existing) {
+    othersDiceWrap = existing;
+    return othersDiceWrap;
+  }
+
+  // Fallback (shouldn't happen): create and place before dice-viz
   othersDiceWrap = document.createElement("div");
+  othersDiceWrap.id = "dice-others";
   othersDiceWrap.className = "dice-others";
   othersDiceWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
-  document.body.appendChild(othersDiceWrap);
+
+  const diceViz = document.getElementById("dice-viz");
+  if (diceViz && diceViz.parentNode) diceViz.parentNode.insertBefore(othersDiceWrap, diceViz);
+  else document.body.appendChild(othersDiceWrap);
+
   return othersDiceWrap;
 }
 
