@@ -109,7 +109,7 @@
           </label>
         </div>
 
-        <button id="add-player">Добавить игрока</button>
+        <button id="add-player">Добавить</button>
       </div>
     </div>
 
@@ -117,6 +117,12 @@
     <div id="player-list-container">
       <h3>Пользователи и персонажи:</h3>
       <ul id="player-list"></ul>
+
+      <!-- Очередность хода (видно в фазе инициативы и боя) -->
+            <div id="turn-order-box" class="turn-order-box" style="display:none;">
+              <div class="turn-order-head">
+                <div class="turn-order-title">Очередность хода</div>
+
     </div>
 
   </div>
@@ -131,12 +137,7 @@
         <div id="board-col">
 
           <div id="board-topbar">
-
-            <!-- Очередность хода (видно в фазе инициативы и боя) -->
-            <div id="turn-order-box" class="turn-order-box" style="display:none;">
-              <div class="turn-order-head">
-                <div class="turn-order-title">Очередность хода</div>
-                <div class="turn-order-round">Круг - <span id="turn-order-round">1</span></div>
+<div class="turn-order-round">Круг - <span id="turn-order-round">1</span></div>
               </div>
               <ul id="turn-order-list" class="turn-order-list"></ul>
             </div>
@@ -257,6 +258,11 @@
   </div>
 </div>
 
+<!-- Other players dice feed (above dice panel) -->
+<div id="dice-others" class="dice-others">
+  <div class="dice-others__title">Броски других</div>
+</div>
+
 <!-- Dice Visualizer (bottom-left) -->
 <div id="dice-viz" class="dice-viz">
   <div class="dice-viz-title">Бросок</div>
@@ -290,7 +296,7 @@
     <button id="roll" class="dice-viz-btn dice-viz-btn--roll" type="button">Бросить</button>
   </div>
 
-  <canvas id="dice-canvas" width="220" height="140"></canvas>
+  <canvas id="dice-canvas" width="200" height="110"></canvas>
 
   <div id="dice-rolls" class="dice-viz-rolls" aria-label="Результаты броска"></div>
 
