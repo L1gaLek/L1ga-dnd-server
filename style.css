@@ -159,7 +159,7 @@ button:hover {
 
 /* Когда есть подложка — делаем клетки полупрозрачными, но линии (outline) видны */
 #game-board.has-bg .cell {
-  background-color: rgba(42, 42, 42, 0.35);
+  background-color: rgba(42, 42, 42, var(--grid-alpha, 0.35));
 }
 
 .cell {
@@ -205,8 +205,8 @@ button:hover {
 .cell {
   width: 50px;
   height: 50px;
-  background-color: #2a2a2a;
-  box-sizing: border-box;
+  background-color: rgba(42, 42, 42, var(--grid-alpha, 1));
+box-sizing: border-box;
 
   /* вместо border */
   outline: 1px solid #444;
@@ -216,8 +216,8 @@ button:hover {
 /* Когда включена подложка — делаем клетки полупрозрачными,
    но оставляем сетку хорошо видимой */
 #game-board.has-bg .cell {
-  background-color: rgba(42, 42, 42, 0.35);
-  outline-color: #666;
+  background-color: rgba(42, 42, 42, var(--grid-alpha, 0.35));
+outline-color: #666;
 }
 
 /* Игроки */
@@ -242,7 +242,7 @@ button:hover {
 
 /* Стены и подсветка */
 .cell.wall {
-  background-color: #555 !important;
+  background-color: rgba(85, 85, 85, var(--wall-alpha, 1)) !important;
 }
 
 .wall.dragging {
@@ -426,6 +426,33 @@ button:hover {
   width: 100%;
   margin: 0 0 8px 0;
 }
+
+.env-bg-url-row{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin: 0 0 8px 0;
+}
+.env-bg-url-row input{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.env-range-row{
+  margin: 0 0 10px 0;
+}
+.env-range-title{
+  font-size: 12px;
+  color: #ddd;
+  margin-bottom: 6px;
+  display:flex;
+  justify-content: space-between;
+  gap:8px;
+  white-space: nowrap;
+}
+.env-range-row input[type="range"]{
+  width: 100%;
+}
+
 
 
 /* Карты кампании (в блоке "Редактирования окружения") */
