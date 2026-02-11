@@ -4065,3 +4065,121 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .cmp-map-actions select{ background:rgba(0,0,0,.35); }
 .cmp-move{ display:flex; gap:8px; align-items:center; }
 .cmp-empty{ opacity:.75; padding:8px 0; }
+
+
+/* ================== UI TUNING (Feb 2026) ================== */
+
+/* 1) "Управление игроками" — компактнее, но без переносов кнопки */
+#player-management{
+  max-width: 360px;
+}
+#player-controls{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+#player-controls input[type="text"]{
+  width: 140px;
+}
+#player-controls label{
+  font-size: 12px;
+}
+#add-player{
+  padding: 4px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 2) Блоки "Броски других" + "Бросок" — уже и ниже по высоте */
+#dice-others,
+.dice-viz{
+  width: 240px;
+  max-width: 240px;
+}
+#dice-others{
+  position: fixed;
+  left: 12px;
+  bottom: 320px; /* над dice-viz */
+  z-index: 999;
+}
+.dice-viz{
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 999;
+}
+.dice-others__title,
+.dice-viz-title{
+  font-size: 12px;
+}
+.dice-viz-controls{
+  gap: 6px;
+}
+.dice-viz-select{
+  width: 60px;
+}
+.dice-viz-count{
+  width: 52px;
+}
+.dice-viz-btn{
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+#dice-rolls{
+  max-height: 56px;
+  overflow: hidden;
+}
+#dice-canvas{
+  width: 200px;
+  height: 110px;
+}
+
+/* 3) Очередность хода — под списком игроков */
+#player-list-container .turn-order-box{
+  margin-top: 10px;
+  max-width: 100%;
+}
+
+/* 4) Настройки размеров поля — в один ряд (вид + ГМ) и крупнее */
+#board-settings{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  align-items: flex-start;
+}
+#board-settings .board-settings-box{
+  min-width: 320px;
+  padding: 10px 12px;
+}
+#board-settings .board-settings-box label{
+  font-size: 14px;
+}
+#board-settings .board-settings-box input[type="number"]{
+  font-size: 14px;
+  width: 90px;
+}
+#board-settings-gm{
+  margin-top: 0 !important;
+}
+
+/* 5) Карточка персонажа: лист — на всю ширину, а размер/цвет/кнопки в одном ряду */
+.player-actions-row{
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.mini-action-btn{
+  padding: 2px 6px;
+  font-size: 12px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+.size-select{
+  min-width: 58px;
+}
+.player-color-input{
+  min-width: 28px;
+}
