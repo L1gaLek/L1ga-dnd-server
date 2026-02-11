@@ -146,6 +146,47 @@ button:hover {
   background-color: #111;
 }
 
+/* Подложка карты (картинка/.gif) — лежит под сеткой */
+#board-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}
+
+/* Когда есть подложка — делаем клетки полупрозрачными, но линии (outline) видны */
+#game-board.has-bg .cell {
+  background-color: rgba(42, 42, 42, 0.35);
+}
+
+.cell {
+  position: relative;
+  z-index: 1;
+}
+
+.player {
+  z-index: 2;
+}
+
+/* UI: строка URL подложки */
+.env-bg-url-row {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0 8px;
+}
+
+.env-bg-url-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.env-bg-url-row button {
+  white-space: nowrap;
+}
+
 /* Подложка под карту (растягивается на весь размер поля) */
 #board-bg {
   position: absolute;
