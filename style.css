@@ -54,7 +54,7 @@ body {
 }
 
 #player-management {
-  width: 260px;
+  width: 240px;
   max-height: 260px;
 }
 
@@ -62,6 +62,37 @@ body {
   width: 260px;
   max-height: 360px;
   overflow-x: hidden;
+}
+
+/* ===== Управление игроками — компактная сетка без переносов кнопки ===== */
+#player-management #player-controls{
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+#player-management #player-controls input[type="text"]{
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+#player-management #player-controls .player-type{
+  grid-column: 1 / -1;
+}
+
+#player-management #player-controls label{
+  display: contents; /* чтобы "Размер" не ломал сетку */
+}
+
+#player-management #player-controls #player-size{
+  width: 88px;
+}
+
+#player-management #add-player{
+  grid-column: 1 / -1;
+  width: 100%;
+  white-space: nowrap;
 }
 
 #action-log h3,
@@ -108,6 +139,28 @@ body {
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+/* Ряд рамок размеров (персональная рамка + GM-карта) */
+.board-settings-row{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.board-settings-box{
+  min-width: 240px;
+}
+
+.board-settings-box label{
+  font-size: 14px;
+}
+
+.board-settings-box input[type="number"]{
+  font-size: 14px;
 }
 
 button, input, select {
@@ -727,6 +780,25 @@ outline-color: #666;
   align-items: center;
   gap: 6px;
 }
+
+.player-actions-row--controls{
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.player-actions-spacer{
+  flex: 1 1 auto;
+}
+
+/* компактные кнопки в карточке игрока */
+.mini-action-btn{
+  font-size: 12px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.mini-action-btn--secondary{ background: rgba(255,255,255,0.08); }
+.mini-action-btn--danger{ background: rgba(255,0,0,0.18); border-color: rgba(255,0,0,0.35); }
 
 .player-actions-row--bottom{
   margin-top: 2px;
@@ -2402,25 +2474,33 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .weapon-desc.collapsed{ display:none; }
 .weapon-desc-text{ width:100%; resize:vertical; }
 
-/* ================== DICE VISUALIZER (bottom-left) ================== */
-.dice-viz{
+/* ================== DICE STACK (bottom-left) ================== */
+.dice-stack{
   position: fixed;
   left: 14px;
   bottom: 14px;
-  width: 270px;
-  padding: 10px;
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9998;
+}
+
+.dice-viz{
+  position: relative;
+  width: 240px;
+  padding: 8px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(20,20,20,0.92);
   box-shadow: 0 10px 30px rgba(0,0,0,0.55);
-  z-index: 9998;
   user-select: none;
 }
 
 .dice-viz-title{
   font-weight: 900;
-  font-size: 13px;
-  margin-bottom: 8px;
+  font-size: 12px;
+  margin-bottom: 6px;
 }
 
 .dice-viz-controls{
@@ -2459,8 +2539,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
   outline: none;
 }
 
-.dice-viz-select{ width: 88px; }
-.dice-viz-count{ width: 70px; }
+.dice-viz-select{ width: 72px; font-size: 12px; padding: 6px 8px; }
+.dice-viz-count{ width: 62px; font-size: 12px; padding: 6px 8px; }
 
 /* Кнопка Инициатива — отдельной строкой внутри панели */
 .dice-viz-btn--initiative{
@@ -2474,8 +2554,9 @@ textarea[data-sheet-path="text.profPlain.value"]{
   border: 1px solid rgba(255,255,255,.18);
   background: rgba(255,255,255,.08);
   color: #fff;
-  padding: 8px 10px;
+  padding: 7px 8px;
   font-weight: 900;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -2548,13 +2629,33 @@ textarea[data-sheet-path="text.profPlain.value"]{
 }
 
 #dice-canvas{
-  width: 250px;
-  height: 140px;
+  width: 224px;
+  height: 110px;
   display: block;
   margin: 0 auto;
   border-radius: 12px;
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.10);
+}
+
+/* ===== Other players dice feed (inline, above dice panel) ===== */
+.dice-others.dice-others--inline{
+  position: relative;
+  left: auto;
+  bottom: auto;
+  width: 240px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(20,20,20,0.88);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+  z-index: 9997;
+  pointer-events: none;
+}
+
+.dice-others.dice-others--inline .dice-others__title{
+  font-size: 12px;
+  margin-bottom: 6px;
 }
 
 .dice-viz-rolls{
@@ -2864,10 +2965,10 @@ textarea[data-sheet-path="text.profPlain.value"]{
   font-weight: 900;
 }
 
-/* ===== Other players dice feed (right of dice panel) ===== */
+/* ===== Other players dice feed ===== */
 .dice-others{
   position: fixed;
-  left: 300px;      /* 14px + ~270px + зазор */
+  left: 300px;      /* legacy fallback (если блок вне стека) */
   bottom: 14px;
   width: 240px;
   padding: 10px;
@@ -2877,6 +2978,17 @@ textarea[data-sheet-path="text.profPlain.value"]{
   box-shadow: 0 10px 30px rgba(0,0,0,0.55);
   z-index: 9997;
   pointer-events: none;
+}
+
+/* Внутри .dice-stack — встает НАД панелью "Бросок" */
+.dice-others--inline{
+  position: relative;
+  left: auto;
+  bottom: auto;
+  width: 240px;
+  padding: 8px;
+  max-height: 140px;
+  overflow: hidden;
 }
 
 .dice-others__title{
@@ -4065,121 +4177,3 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .cmp-map-actions select{ background:rgba(0,0,0,.35); }
 .cmp-move{ display:flex; gap:8px; align-items:center; }
 .cmp-empty{ opacity:.75; padding:8px 0; }
-
-
-/* ================== UI TUNING (Feb 2026) ================== */
-
-/* 1) "Управление игроками" — компактнее, но без переносов кнопки */
-#player-management{
-  max-width: 360px;
-}
-#player-controls{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-#player-controls input[type="text"]{
-  width: 140px;
-}
-#player-controls label{
-  font-size: 12px;
-}
-#add-player{
-  padding: 4px 10px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-/* 2) Блоки "Броски других" + "Бросок" — уже и ниже по высоте */
-#dice-others,
-.dice-viz{
-  width: 240px;
-  max-width: 240px;
-}
-#dice-others{
-  position: fixed;
-  left: 12px;
-  bottom: 320px; /* над dice-viz */
-  z-index: 999;
-}
-.dice-viz{
-  position: fixed;
-  left: 12px;
-  bottom: 12px;
-  z-index: 999;
-}
-.dice-others__title,
-.dice-viz-title{
-  font-size: 12px;
-}
-.dice-viz-controls{
-  gap: 6px;
-}
-.dice-viz-select{
-  width: 60px;
-}
-.dice-viz-count{
-  width: 52px;
-}
-.dice-viz-btn{
-  padding: 4px 8px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-#dice-rolls{
-  max-height: 56px;
-  overflow: hidden;
-}
-#dice-canvas{
-  width: 200px;
-  height: 110px;
-}
-
-/* 3) Очередность хода — под списком игроков */
-#player-list-container .turn-order-box{
-  margin-top: 10px;
-  max-width: 100%;
-}
-
-/* 4) Настройки размеров поля — в один ряд (вид + ГМ) и крупнее */
-#board-settings{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: center;
-  align-items: flex-start;
-}
-#board-settings .board-settings-box{
-  min-width: 320px;
-  padding: 10px 12px;
-}
-#board-settings .board-settings-box label{
-  font-size: 14px;
-}
-#board-settings .board-settings-box input[type="number"]{
-  font-size: 14px;
-  width: 90px;
-}
-#board-settings-gm{
-  margin-top: 0 !important;
-}
-
-/* 5) Карточка персонажа: лист — на всю ширину, а размер/цвет/кнопки в одном ряду */
-.player-actions-row{
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
-}
-.mini-action-btn{
-  padding: 2px 6px;
-  font-size: 12px;
-  line-height: 14px;
-  white-space: nowrap;
-}
-.size-select{
-  min-width: 58px;
-}
-.player-color-input{
-  min-width: 28px;
-}
