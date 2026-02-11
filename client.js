@@ -119,6 +119,24 @@ function safeGetUserRoleDb() {
   return normalizeRoleForDb(raw);
 }
 
+function getCampaignOwnerKey() {
+  // Устойчивый ключ владельца кампаний на этом устройстве/браузере.
+  // Без Supabase Auth это самый простой способ "привязать" сохранения к ГМу
+  // и позволить загружать их в любой комнате.
+  const LS_KEY = "dnd_campaign_owner_key";
+  let key = String(localStorage.getItem(LS_KEY) || "").trim();
+  if (key) return key;
+
+  // crypto.randomUUID есть почти везде, но сделаем fallback
+  key = (window.crypto && typeof window.crypto.randomUUID === "function")
+    ? window.crypto.randomUUID()
+    : ("owner_" + Math.random().toString(16).slice(2) + "_" + Date.now());
+
+  localStorage.setItem(LS_KEY, key);
+  return key;
+}
+
+
 function isGM() { return String(myRole || '') === 'GM'; }
 function isSpectator() { return String(myRole || '') === 'Spectator'; }
 
@@ -1670,44 +1688,53 @@ clearBoardBtn.addEventListener('click', () => {
   sendMessage({ type: 'clearBoard' });
 });
 
-/*
-// ================== CAMPAIGN SAVES (GM) ==================
-*/
+
+// ===== Campaign save/load UI (GM) =====
+function snapshotCampaignStateForSave() {
+  const st = ensureStateHasMaps(deepClone(lastState || null));
+  // Зафиксируем всё текущее (подложка/стены/позиции) в активную карту перед сохранением
+  syncActiveToMap(st);
+  return st;
+}
 
 let campaignSavesOverlay = null;
 
 function openCampaignSavesOverlay(list, onPick) {
-  if (campaignSavesOverlay) campaignSavesOverlay.remove();
+  if (campaignSavesOverlay) {
+    try { campaignSavesOverlay.remove(); } catch {}
+    campaignSavesOverlay = null;
+  }
 
   const ov = document.createElement('div');
   ov.className = 'modal-overlay';
   ov.innerHTML = `
-    <div class="modal" style="max-width:720px;">
+    <div class="modal" style="max-width: 760px;">
       <div class="modal-header">
         <div>
           <div class="modal-title">Загрузить кампанию</div>
-          <div class="modal-subtitle">Выберите сохранение</div>
+          <div class="modal-subtitle">Сохранения доступны в любой комнате (привязка к этому браузеру ГМа)</div>
         </div>
         <button class="modal-close" data-cmp-close>✕</button>
       </div>
-      <div class="modal-body" style="padding:12px 14px;">
+      <div class="modal-body">
         <div style="display:flex; flex-direction:column; gap:10px;" data-cmp-list></div>
       </div>
     </div>
   `;
+
   document.body.appendChild(ov);
   campaignSavesOverlay = ov;
 
   const close = () => {
-    ov.remove();
+    try { ov.remove(); } catch {}
     if (campaignSavesOverlay === ov) campaignSavesOverlay = null;
   };
 
   ov.addEventListener('click', (e) => {
     const t = e.target;
     if (!(t instanceof Element)) return;
-    if (t === ov) close();
-    if (t.closest('[data-cmp-close]')) close();
+    if (t.classList.contains('modal-overlay')) return close();
+    if (t.closest('[data-cmp-close]')) return close();
   });
 
   const box = ov.querySelector('[data-cmp-list]');
@@ -1721,22 +1748,22 @@ function openCampaignSavesOverlay(list, onPick) {
   list.forEach((it) => {
     const row = document.createElement('div');
     row.className = 'saved-bases-row';
-    const dt = it.created_at ? new Date(it.created_at) : null;
-    const meta = dt && !Number.isNaN(dt.getTime()) ? dt.toLocaleString() : String(it.created_at || '');
+    const created = it.created_at ? new Date(it.created_at).toLocaleString() : '';
     row.innerHTML = `
       <div class="saved-bases-row-main" style="flex:1;">
-        <div class="saved-bases-row-name">${escapeHtmlLocal(String(it.name || 'Без названия'))}</div>
-        <div class="saved-bases-row-meta">${escapeHtmlLocal(meta)}</div>
+        <div class="saved-bases-row-name">${String(it.name || 'Без названия')}</div>
+        <div class="saved-bases-row-meta">${created}</div>
       </div>
       <div style="display:flex; gap:8px;">
-        <button type="button" data-pick="${String(it.id)}">Загрузить</button>
-        <button type="button" data-del="${String(it.id)}">Удалить</button>
+        <button type="button" data-pick="${it.id}">Загрузить</button>
+        <button type="button" data-del="${it.id}">Удалить</button>
       </div>
     `;
 
     row.addEventListener('click', async (e) => {
       const tt = e.target;
       if (!(tt instanceof Element)) return;
+
       const pick = tt.closest('[data-pick]');
       if (pick) {
         const id = pick.getAttribute('data-pick');
@@ -1744,14 +1771,14 @@ function openCampaignSavesOverlay(list, onPick) {
         onPick?.(id);
         return;
       }
+
       const del = tt.closest('[data-del]');
       if (del) {
         const id = del.getAttribute('data-del');
-        if (!id) return;
         if (!confirm('Удалить это сохранение?')) return;
         try {
           await deleteCampaignSave(id);
-          const fresh = await listCampaignSaves(currentRoomId);
+          const fresh = await listCampaignSavesByOwner(getCampaignOwnerKey());
           close();
           openCampaignSavesOverlay(fresh, onPick);
         } catch (err) {
@@ -1769,13 +1796,16 @@ saveCampaignBtn?.addEventListener('click', async () => {
   try {
     if (!isGM()) return;
     if (!currentRoomId) return;
+
     const name = prompt('Название сохранения:', `Сохранение ${new Date().toLocaleString()}`);
     if (name === null) return;
     const clean = String(name).trim();
     if (!clean) return;
+
     const snap = snapshotCampaignStateForSave();
-    await createCampaignSave(currentRoomId, clean, snap);
-    alert('Кампания сохранена.');
+    const ownerKey = getCampaignOwnerKey();
+    await createCampaignSave(ownerKey, clean, snap);
+    alert('Кампания сохранена. Теперь её можно загрузить в любой комнате.');
   } catch (err) {
     console.error(err);
     alert('Не удалось сохранить кампанию');
@@ -1786,12 +1816,17 @@ loadCampaignBtn?.addEventListener('click', async () => {
   try {
     if (!isGM()) return;
     if (!currentRoomId) return;
-    const list = await listCampaignSaves(currentRoomId);
+
+    const ownerKey = getCampaignOwnerKey();
+    const list = await listCampaignSavesByOwner(ownerKey);
+
     openCampaignSavesOverlay(list, async (saveId) => {
       try {
         const st = await getCampaignSaveState(saveId);
         if (!st) return alert('Сохранение пустое/не найдено');
+
         const normalized = ensureStateHasMaps(deepClone(st));
+        // Загружаем в ТЕКУЩУЮ комнату
         await upsertRoomState(currentRoomId, normalized);
       } catch (e) {
         console.error(e);
@@ -1931,14 +1966,6 @@ function syncActiveToMap(state) {
   return st;
 }
 
-// ===== Campaign saves (GM) =====
-function snapshotCampaignStateForSave() {
-  const st = ensureStateHasMaps(deepClone(lastState || null));
-  // ensure active-map snapshot is up-to-date
-  syncActiveToMap(st);
-  return st;
-}
-
 function loadMapToRoot(state, mapId) {
   const st = ensureStateHasMaps(state);
   const targetId = String(mapId || "");
@@ -2057,24 +2084,27 @@ async function upsertRoomState(roomId, nextState) {
   if (error) throw error;
 }
 
+
 // ===== Campaign saves (GM) =====
-async function listCampaignSaves(roomId) {
+// Сохранения кампаний НЕ привязаны к комнате, а привязаны к "ключу владельца" (owner_key),
+// который хранится в localStorage у ГМа. Тогда ГМ может зайти в любую комнату и загрузить кампанию.
+async function listCampaignSavesByOwner(ownerKey) {
   await ensureSupabaseReady();
   const { data, error } = await sbClient
     .from('campaign_saves')
     .select('id,name,created_at')
-    .eq('room_id', roomId)
+    .eq('owner_key', ownerKey)
     .order('created_at', { ascending: false })
     .limit(50);
   if (error) throw error;
   return data || [];
 }
 
-async function createCampaignSave(roomId, name, state) {
+async function createCampaignSave(ownerKey, name, state) {
   await ensureSupabaseReady();
   const { error } = await sbClient
     .from('campaign_saves')
-    .insert({ room_id: roomId, name, state });
+    .insert({ owner_key: ownerKey, name, state });
   if (error) throw error;
 }
 
