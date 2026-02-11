@@ -45,6 +45,8 @@ const boardWidthInput = document.getElementById('board-width');
 const boardHeightInput = document.getElementById('board-height');
 const resetGameBtn = document.getElementById('reset-game');
 const clearBoardBtn = document.getElementById('clear-board');
+const saveCampaignBtn = document.getElementById('save-campaign');
+const loadCampaignBtn = document.getElementById('load-campaign');
 
 const playerNameInput = document.getElementById('player-name');
 const playerColorInput = document.getElementById('player-color');
@@ -67,14 +69,10 @@ const startExplorationBtn = document.getElementById("start-exploration");
 const worldPhasesBox = document.getElementById('world-phases');
 const envEditorBox = document.getElementById('env-editor');
 
-// ===== Подложка карты (ГМ): файл + URL =====
+// ===== Подложка карты (ГМ) =====
 const boardBgEl = document.getElementById('board-bg');
 const boardBgFileInput = document.getElementById('board-bg-file');
 const boardBgClearBtn = document.getElementById('board-bg-clear');
-const boardBgUrlInput = document.getElementById('board-bg-url');
-const boardBgUrlApplyBtn = document.getElementById('board-bg-url-apply');
-
-
 
 // ===== Карты кампании (ГМ) =====
 const campaignMapsSelect = document.getElementById('campaign-maps-select');
@@ -124,19 +122,9 @@ function safeGetUserRoleDb() {
 function isGM() { return String(myRole || '') === 'GM'; }
 function isSpectator() { return String(myRole || '') === 'Spectator'; }
 
-// Более устойчивое определение роли/идентичности (важно после F5/перезагрузки)
-function getRoleFromStorageOrMemory() {
-  const ls = String(localStorage.getItem('dnd_user_role') || '').trim();
-  return String(ls || myRole || '').trim();
-}
-
-function isGMNow() { return getRoleFromStorageOrMemory() === 'GM'; }
-function isSpectatorNow() { return getRoleFromStorageOrMemory() === 'Spectator'; }
-
 function applyRoleToUI() {
-  // Используем роль из localStorage, чтобы GM-панель не "умирала" после обновления страницы
-  const gm = isGMNow();
-  const spectator = isSpectatorNow();
+  const gm = isGM();
+  const spectator = isSpectator();
 
   // ГМ-панель справа (Фазы мира + Редактирование окружения)
   const rightPanel = document.getElementById('right-panel');
@@ -172,120 +160,67 @@ function applyRoleToUI() {
 }
 
 // ================== MAP BACKGROUND (GM) ==================
-const BOARD_BG_BUCKET = "dnd-board-bg";
-
-// Вариант №1: храним файл в Supabase Storage, а в room_state — только ссылку.
-function safeFilename(name) {
-  const base = String(name || "bg").replace(/[^a-zA-Z0-9._-]+/g, "_");
-  return base.slice(0, 80) || "bg";
-}
-
-async function deleteBoardBgFromStorage(pathInBucket) {
-  try {
-    if (!sbClient || !pathInBucket) return;
-    await sbClient.storage.from(BOARD_BG_BUCKET).remove([pathInBucket]);
-  } catch (e) {
-    // Не фейлим весь поток — просто логируем
-    console.warn("Storage remove failed:", e);
-  }
-}
-
-async function uploadBoardBgToStorage(file, roomId) {
-  if (!sbClient) throw new Error("Supabase client not initialized");
-  if (!roomId) throw new Error("No roomId");
-  if (!file) throw new Error("No file");
-
-  const ext = (file.name || "").split(".").pop();
-  const id = (crypto?.randomUUID ? crypto.randomUUID() : ("bg-" + Math.random().toString(16).slice(2)));
-  const fn = safeFilename(file.name);
-  const pathInBucket = `${roomId}/${id}_${fn}`;
-
-  // upsert: true — чтобы не падало на совпадениях, хотя id уже уникальный
-  const { error: upErr } = await sbClient.storage
-    .from(BOARD_BG_BUCKET)
-    .upload(pathInBucket, file, { upsert: true, contentType: file.type || "application/octet-stream" });
-
-  if (upErr) throw upErr;
-
-  const { data } = sbClient.storage.from(BOARD_BG_BUCKET).getPublicUrl(pathInBucket);
-  const url = data?.publicUrl;
-  if (!url) throw new Error("Could not get public URL for uploaded file");
-
-  return { url, path: pathInBucket };
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result || ""));
+    fr.onerror = () => reject(fr.error || new Error("FileReader error"));
+    fr.readAsDataURL(file);
+  });
 }
 
 if (boardBgFileInput) {
-  boardBgFileInput.addEventListener("change", async (e) => {
+  boardBgFileInput.addEventListener('change', async (e) => {
     try {
       if (!isGM()) return;
       const file = e?.target?.files?.[0];
       if (!file) return;
 
-      // При хранении в Storage мы не ограничиваемся лимитами room_state,
-      // но оставим мягкую защиту от совсем гигантских файлов.
-      const maxSoft = 50 * 1024 * 1024; // 50MB
-      if (file.size > maxSoft) {
-        alert("Файл слишком большой (более 50 МБ). Рекомендуется уменьшить.");
-        e.target.value = "";
+      // мягкий лимит, чтобы не раздувать room_state
+      if (file.size > 8 * 1024 * 1024) {
+        alert('Файл слишком большой. Рекомендуется до 8 МБ.');
+        e.target.value = '';
         return;
       }
 
-      // удалить старую подложку (если была), чтобы не копить мусор
-      const prevPath = lastState?.boardBg?.path || lastState?.boardBgPath || null;
-      if (prevPath) await deleteBoardBgFromStorage(prevPath);
-
-      const uploaded = await uploadBoardBgToStorage(file, currentRoomId);
-      await sendMessage({ type: "setBoardBg", url: uploaded.url, path: uploaded.path });
-
-      e.target.value = "";
+      const dataUrl = await readFileAsDataUrl(file);
+      await sendMessage({ type: 'setBoardBg', dataUrl });
+      e.target.value = '';
     } catch (err) {
       console.error(err);
-      alert("Не удалось загрузить подложку. Проверь bucket/policies в Supabase Storage.");
-      try { e.target.value = ""; } catch {}
+      alert('Не удалось загрузить подложку');
     }
   });
 }
 
 if (boardBgClearBtn) {
-  boardBgClearBtn.addEventListener("click", async () => {
+  boardBgClearBtn.addEventListener('click', async () => {
     if (!isGM()) return;
-
-    // удаляем текущий файл из Storage (если есть)
-    const prevPath = lastState?.boardBg?.path || lastState?.boardBgPath || null;
-    if (prevPath) await deleteBoardBgFromStorage(prevPath);
-
-    await sendMessage({ type: "clearBoardBg" });
+    await sendMessage({ type: 'clearBoardBg' });
   });
 }
 
 function applyBoardBackgroundToDom(state) {
   // гарантируем наличие слоя подложки (на случай старого HTML)
-  let bg = boardBgEl || document.getElementById("board-bg");
+  let bg = boardBgEl || document.getElementById('board-bg');
   if (!bg && board) {
-    bg = document.createElement("div");
-    bg.id = "board-bg";
-    bg.setAttribute("aria-hidden", "true");
+    bg = document.createElement('div');
+    bg.id = 'board-bg';
+    bg.setAttribute('aria-hidden', 'true');
     board.prepend(bg);
   }
 
   if (!bg || !board) return;
 
-  // Совместимость: если где-то еще остался dataUrl — тоже поддержим.
-  const url =
-    state?.boardBg?.url ||
-    state?.boardBgUrl ||
-    state?.boardBgDataUrl ||
-    null;
-
-  bg.style.backgroundImage = url ? `url(${url})` : "none";
+  const dataUrl = state?.boardBgDataUrl || null;
+  bg.style.backgroundImage = dataUrl ? `url(${dataUrl})` : 'none';
 
   // Важно: размеры берем из актуального состояния, а не из глобальных переменных
   const bw = Number(state?.boardWidth) || 10;
   const bh = Number(state?.boardHeight) || 10;
   bg.style.width = `${bw * 50}px`;
   bg.style.height = `${bh * 50}px`;
-
-  board.classList.toggle("has-bg", !!url);
+  board.classList.toggle('has-bg', !!dataUrl);
 }
 
 // ================== CAMPAIGN MAPS UI HOOKS (GM) ==================
@@ -316,140 +251,6 @@ function updateCampaignMapsUI(state) {
     try { window.ControlBox?.updateCampaignParams?.(st); } catch {}
   } catch {}
 }
-
-// ================== MAP BACKGROUND (GM): FILE or URL ==================
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(String(fr.result || ""));
-    fr.onerror = () => reject(fr.error || new Error("FileReader error"));
-    fr.readAsDataURL(file);
-  });
-}
-
-function normalizeHttpUrl(raw) {
-  const s = String(raw || "").trim();
-  if (!s) return "";
-  try {
-    const u = new URL(s);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return "";
-    return u.toString();
-  } catch {
-    return "";
-  }
-}
-
-function preloadImage(url, timeoutMs = 8000) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const t = setTimeout(() => {
-      cleanup();
-      reject(new Error("timeout"));
-    }, timeoutMs);
-
-    function cleanup() {
-      clearTimeout(t);
-      img.onload = null;
-      img.onerror = null;
-    }
-
-    img.onload = () => {
-      cleanup();
-      resolve(true);
-    };
-    img.onerror = () => {
-      cleanup();
-      reject(new Error("load error"));
-    };
-    img.src = url;
-  });
-}
-
-if (boardBgFileInput) {
-  boardBgFileInput.addEventListener("change", async (e) => {
-    try {
-      if (!isGM()) return;
-      const file = e?.target?.files?.[0];
-      if (!file) return;
-
-      // ВНИМАНИЕ: file -> dataURL хранится в room_state и может упираться в лимиты.
-      // Для больших файлов используйте URL (или Storage-вариант).
-      const maxSoft = 8 * 1024 * 1024;
-      if (file.size > maxSoft) {
-        alert("Файл слишком большой для хранения в состоянии комнаты (рекомендуется до 8 МБ). Используйте URL или загрузку в Storage.");
-        e.target.value = "";
-        return;
-      }
-
-      const dataUrl = await readFileAsDataUrl(file);
-      await sendMessage({ type: "setBoardBg", dataUrl });
-      e.target.value = "";
-    } catch (err) {
-      console.error(err);
-      alert("Не удалось загрузить подложку");
-      try { e.target.value = ""; } catch {}
-    }
-  });
-}
-
-if (boardBgUrlApplyBtn) {
-  boardBgUrlApplyBtn.addEventListener("click", async () => {
-    if (!isGM()) return;
-    const url = normalizeHttpUrl(boardBgUrlInput?.value);
-    if (!url) return alert("Укажи корректную ссылку (http/https) на файл картинки или .gif");
-
-    // Быстрая проверка, что ссылка реально отдаёт изображение (и не блокируется)
-    try {
-      await preloadImage(url, 8000);
-    } catch {
-      return alert("Не удалось загрузить картинку по ссылке. Возможно сайт запрещает встраивание (hotlink). Попробуй другой источник или загрузи файл в Storage.");
-    }
-
-    await sendMessage({ type: "setBoardBg", url });
-  });
-}
-
-if (boardBgClearBtn) {
-  boardBgClearBtn.addEventListener("click", async () => {
-    if (!isGM()) return;
-    await sendMessage({ type: "clearBoardBg" });
-  });
-}
-
-function applyBoardBackgroundToDom(state) {
-  if (!board) return;
-
-  // гарантируем наличие слоя подложки (на случай старого HTML)
-  let bg = boardBgEl || document.getElementById("board-bg");
-  if (!bg) {
-    bg = document.createElement("div");
-    bg.id = "board-bg";
-    bg.setAttribute("aria-hidden", "true");
-    board.prepend(bg);
-  }
-
-  // Источники: URL (приоритет) -> boardBg.url (совместимость) -> dataUrl (старый режим)
-  const url = state?.boardBgUrl || state?.boardBg?.url || "";
-  const dataUrl = state?.boardBgDataUrl || "";
-  const src = String(url || dataUrl || "").trim();
-
-  bg.style.backgroundImage = src ? `url("${src}")` : "none";
-
-  // Подложка должна совпадать с реальным размером карты (boardWidth/boardHeight в state)
-  const bw = Number(state?.boardWidth) || boardWidth || 10;
-  const bh = Number(state?.boardHeight) || boardHeight || 10;
-  bg.style.width = `${bw * 50}px`;
-  bg.style.height = `${bh * 50}px`;
-
-  board.classList.toggle("has-bg", !!src);
-
-  // подставим URL в инпут (GM), чтобы было видно что сейчас стоит
-  if (isGM() && boardBgUrlInput) {
-    const cur = String(boardBgUrlInput.value || "").trim();
-    if (!cur && url) boardBgUrlInput.value = url;
-  }
-}
-
 let currentRoomId = null;
 
 let heartbeatTimer = null;
@@ -590,34 +391,6 @@ window.SUPABASE_FETCH_FN = "fetch";
   // list rooms from DB
   sendMessage({ type: 'listRooms' });
 });
-
-// ================== RESTORE SESSION (after refresh) ==================
-// Если пользователь обновил страницу, localStorage уже содержит user_id/name/role,
-// но переменные myRole/myId будут пустыми, из-за чего ГМ-кнопки становятся disabled.
-(function restoreSessionFromLocalStorage() {
-  try {
-    const savedId = String(localStorage.getItem('dnd_user_id') || '').trim();
-    const savedName = String(localStorage.getItem('dnd_user_name') || '').trim();
-    const savedRole = String(localStorage.getItem('dnd_user_role') || '').trim();
-
-    if (!savedId || !savedName || !savedRole) return; // нечего восстанавливать
-
-    // Подставим значения в UI логина (чтобы было видно, что сохранено)
-    if (usernameInput && !usernameInput.value) usernameInput.value = savedName;
-    if (roleSelect && savedRole) roleSelect.value = savedRole;
-
-    // Инициализируем Supabase клиент (как при обычном входе)
-    if (!sbClient && window.supabase && window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
-      sbClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-      window.SUPABASE_FETCH_FN = "fetch";
-    }
-
-    // Восстановим локальные переменные и сразу покажем лобби комнат.
-    handleMessage({ type: 'registered', id: savedId, name: savedName, role: savedRole });
-  } catch (e) {
-    console.warn('restoreSessionFromLocalStorage failed', e);
-  }
-})();
 
 // ================== MESSAGE HANDLER (used by Supabase subscriptions) ==================
 function handleMessage(msg) {
@@ -798,7 +571,6 @@ loginDiv.style.display = 'none';
       }
 
       renderBoard(normalized);
-      applyBoardBackgroundToDom(normalized);
       updatePhaseUI(normalized);
       updatePlayerList();
       updateCurrentPlayer(normalized);
@@ -1899,6 +1671,140 @@ clearBoardBtn.addEventListener('click', () => {
 });
 
 /*
+// ================== CAMPAIGN SAVES (GM) ==================
+*/
+
+let campaignSavesOverlay = null;
+
+function openCampaignSavesOverlay(list, onPick) {
+  if (campaignSavesOverlay) campaignSavesOverlay.remove();
+
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.innerHTML = `
+    <div class="modal" style="max-width:720px;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">Загрузить кампанию</div>
+          <div class="modal-subtitle">Выберите сохранение</div>
+        </div>
+        <button class="modal-close" data-cmp-close>✕</button>
+      </div>
+      <div class="modal-body" style="padding:12px 14px;">
+        <div style="display:flex; flex-direction:column; gap:10px;" data-cmp-list></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(ov);
+  campaignSavesOverlay = ov;
+
+  const close = () => {
+    ov.remove();
+    if (campaignSavesOverlay === ov) campaignSavesOverlay = null;
+  };
+
+  ov.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    if (t === ov) close();
+    if (t.closest('[data-cmp-close]')) close();
+  });
+
+  const box = ov.querySelector('[data-cmp-list]');
+  if (!box) return;
+
+  if (!list || list.length === 0) {
+    box.innerHTML = `<div class="sheet-note">Сохранений нет.</div>`;
+    return;
+  }
+
+  list.forEach((it) => {
+    const row = document.createElement('div');
+    row.className = 'saved-bases-row';
+    const dt = it.created_at ? new Date(it.created_at) : null;
+    const meta = dt && !Number.isNaN(dt.getTime()) ? dt.toLocaleString() : String(it.created_at || '');
+    row.innerHTML = `
+      <div class="saved-bases-row-main" style="flex:1;">
+        <div class="saved-bases-row-name">${escapeHtmlLocal(String(it.name || 'Без названия'))}</div>
+        <div class="saved-bases-row-meta">${escapeHtmlLocal(meta)}</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" data-pick="${String(it.id)}">Загрузить</button>
+        <button type="button" data-del="${String(it.id)}">Удалить</button>
+      </div>
+    `;
+
+    row.addEventListener('click', async (e) => {
+      const tt = e.target;
+      if (!(tt instanceof Element)) return;
+      const pick = tt.closest('[data-pick]');
+      if (pick) {
+        const id = pick.getAttribute('data-pick');
+        close();
+        onPick?.(id);
+        return;
+      }
+      const del = tt.closest('[data-del]');
+      if (del) {
+        const id = del.getAttribute('data-del');
+        if (!id) return;
+        if (!confirm('Удалить это сохранение?')) return;
+        try {
+          await deleteCampaignSave(id);
+          const fresh = await listCampaignSaves(currentRoomId);
+          close();
+          openCampaignSavesOverlay(fresh, onPick);
+        } catch (err) {
+          console.error(err);
+          alert('Не удалось удалить сохранение');
+        }
+      }
+    });
+
+    box.appendChild(row);
+  });
+}
+
+saveCampaignBtn?.addEventListener('click', async () => {
+  try {
+    if (!isGM()) return;
+    if (!currentRoomId) return;
+    const name = prompt('Название сохранения:', `Сохранение ${new Date().toLocaleString()}`);
+    if (name === null) return;
+    const clean = String(name).trim();
+    if (!clean) return;
+    const snap = snapshotCampaignStateForSave();
+    await createCampaignSave(currentRoomId, clean, snap);
+    alert('Кампания сохранена.');
+  } catch (err) {
+    console.error(err);
+    alert('Не удалось сохранить кампанию');
+  }
+});
+
+loadCampaignBtn?.addEventListener('click', async () => {
+  try {
+    if (!isGM()) return;
+    if (!currentRoomId) return;
+    const list = await listCampaignSaves(currentRoomId);
+    openCampaignSavesOverlay(list, async (saveId) => {
+      try {
+        const st = await getCampaignSaveState(saveId);
+        if (!st) return alert('Сохранение пустое/не найдено');
+        const normalized = ensureStateHasMaps(deepClone(st));
+        await upsertRoomState(currentRoomId, normalized);
+      } catch (e) {
+        console.error(e);
+        alert('Не удалось загрузить кампанию');
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    alert('Не удалось получить список сохранений');
+  }
+});
+
+/*
 // ================== HELPER ==================
 */
 
@@ -2025,6 +1931,14 @@ function syncActiveToMap(state) {
   return st;
 }
 
+// ===== Campaign saves (GM) =====
+function snapshotCampaignStateForSave() {
+  const st = ensureStateHasMaps(deepClone(lastState || null));
+  // ensure active-map snapshot is up-to-date
+  syncActiveToMap(st);
+  return st;
+}
+
 function loadMapToRoot(state, mapId) {
   const st = ensureStateHasMaps(state);
   const targetId = String(mapId || "");
@@ -2140,6 +2054,47 @@ async function upsertRoomState(roomId, nextState) {
     updated_at: new Date().toISOString()
   };
   const { error } = await sbClient.from("room_state").upsert(payload);
+  if (error) throw error;
+}
+
+// ===== Campaign saves (GM) =====
+async function listCampaignSaves(roomId) {
+  await ensureSupabaseReady();
+  const { data, error } = await sbClient
+    .from('campaign_saves')
+    .select('id,name,created_at')
+    .eq('room_id', roomId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return data || [];
+}
+
+async function createCampaignSave(roomId, name, state) {
+  await ensureSupabaseReady();
+  const { error } = await sbClient
+    .from('campaign_saves')
+    .insert({ room_id: roomId, name, state });
+  if (error) throw error;
+}
+
+async function getCampaignSaveState(saveId) {
+  await ensureSupabaseReady();
+  const { data, error } = await sbClient
+    .from('campaign_saves')
+    .select('state')
+    .eq('id', saveId)
+    .single();
+  if (error) throw error;
+  return data?.state || null;
+}
+
+async function deleteCampaignSave(saveId) {
+  await ensureSupabaseReady();
+  const { error } = await sbClient
+    .from('campaign_saves')
+    .delete()
+    .eq('id', saveId);
   if (error) throw error;
 }
 
@@ -2664,35 +2619,6 @@ async function sendMessage(msg) {
           logEventToState(next, "Поле изменено");
         }
 
-        else if (type === "setBoardBg") {
-          if (!isGM) return;
-
-          const url = normalizeHttpUrl(msg.url);
-          const dataUrl = String(msg.dataUrl || "").trim();
-
-          if (url) {
-            next.boardBgUrl = url;
-            next.boardBg = { url };
-            next.boardBgDataUrl = null;
-            logEventToState(next, "GM установил подложку по ссылке");
-          } else if (dataUrl) {
-            next.boardBgDataUrl = dataUrl;
-            next.boardBgUrl = null;
-            next.boardBg = null;
-            logEventToState(next, "GM загрузил подложку файлом");
-          } else {
-            return;
-          }
-        }
-
-        else if (type === "clearBoardBg") {
-          if (!isGM) return;
-          next.boardBgUrl = null;
-          next.boardBgDataUrl = null;
-          next.boardBg = null;
-          logEventToState(next, "GM убрал подложку карты");
-        }
-
         else if (type === "startInitiative") {
           if (!isGM) return;
           next.phase = "initiative";
@@ -2866,33 +2792,13 @@ else if (type === "addWall") {
 
         else if (type === "setBoardBg") {
           if (!isGM) return;
-
-          // Новый формат: { url, path } в Storage
-          const url = String(msg.url || "").trim();
-          const path = String(msg.path || "").trim();
-
-          if (url) {
-            next.boardBg = { url, path: path || null };
-            next.boardBgUrl = url;     // совместимость
-            next.boardBgPath = path || null;
-            next.boardBgDataUrl = null; // старый формат убираем
-            logEventToState(next, "Подложка карты загружена");
-          } else {
-            // Совместимость со старым форматом: dataUrl
-            const dataUrl = String(msg.dataUrl || "").trim();
-            next.boardBgDataUrl = dataUrl ? dataUrl : null;
-            next.boardBg = null;
-            next.boardBgUrl = null;
-            next.boardBgPath = null;
-            logEventToState(next, next.boardBgDataUrl ? "Подложка карты загружена" : "Подложка карты очищена");
-          }
+          const dataUrl = String(msg.dataUrl || "").trim();
+          next.boardBgDataUrl = dataUrl ? dataUrl : null;
+          logEventToState(next, next.boardBgDataUrl ? "Подложка карты загружена" : "Подложка карты очищена");
         }
 
         else if (type === "clearBoardBg") {
           if (!isGM) return;
-          next.boardBg = null;
-          next.boardBgUrl = null;
-          next.boardBgPath = null;
           next.boardBgDataUrl = null;
           logEventToState(next, "Подложка карты очищена");
         }
