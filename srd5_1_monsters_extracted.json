@@ -1,12 +1,12 @@
-{
-  "meta": {
+[
+  {
     "source": "SRD 5.1 CC v5.1 PDF",
     "extracted_from": "SRD_CC_v5.1.pdf",
     "extracted_at": "2026-02-11T13:27:51.441144Z",
     "count": 197,
     "notes": "Descriptive text is kept in English in text_en fields. text_ru placeholders are empty; you can translate later. Core fields (size/type/alignment/name transliteration) are in Russian."
   },
-  "monsters": [
+  [
     {
       "id": "aboleth",
       "name_en": "Aboleth",
@@ -17773,4 +17773,4 @@
       "source": "SRD 5.1 (CC BY 4.0)"
     }
   ]
-}
+]
