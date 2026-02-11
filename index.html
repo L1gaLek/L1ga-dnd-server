@@ -194,26 +194,9 @@
             <button id="add-wall" disabled>Добавить стену</button>
             <button id="remove-wall" disabled>Удалить стену</button>
 
-            <div class="env-range-row env-range-row--wall">
-              <div class="env-range-title">Прозрачность стен: <span id="wall-opacity-val">100%</span></div>
-              <input id="wall-opacity" type="range" min="0" max="100" value="100" />
-            </div>
-
             <div class="env-bg-controls">
               <div class="env-bg-title">Подложка карты</div>
-
               <input id="board-bg-file" type="file" accept="image/*,.gif" />
-
-              <div class="env-bg-url-row">
-                <input id="board-bg-url" type="url" placeholder="Ссылка на изображение / .gif (https://...)" />
-                <button id="board-bg-url-apply" type="button">Загрузить по ссылке</button>
-              </div>
-
-              <div class="env-range-row">
-                <div class="env-range-title">Прозрачность клеток: <span id="grid-opacity-val">35%</span></div>
-                <input id="grid-opacity" type="range" min="0" max="100" value="35" />
-              </div>
-
               <button id="board-bg-clear" type="button">Убрать подложку</button>
             </div>
 
@@ -232,6 +215,8 @@
 
             <button id="save-campaign" type="button">Сохранить кампанию</button>
             <button id="load-campaign" type="button">Загрузить кампанию</button>
+
+            <button id="open-monsters" type="button" title="Открыть библиотеку монстров SRD 5.1 (CC BY 4.0)">Монстры SRD</button>
 
             <button id="clear-board">Очистить поле</button>
             <button id="reset-game">Сбросить игру полностью</button>
@@ -319,8 +304,9 @@
 </script>
 
   <script src="controlbox.js"></script>
-<script src="client.js"></script>
-<script src="info-dnd-player.js" defer></script>
+  <script src="monsters-library.js"></script>
+  <script src="client.js"></script>
+  <script src="info-dnd-player.js" defer></script>
 
 </body>
 </html>
