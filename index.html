@@ -117,12 +117,15 @@
     <div id="player-list-container">
       <h3>Пользователи и персонажи:</h3>
       <ul id="player-list"></ul>
+    </div>
 
-      <!-- Очередность хода (видно в фазе инициативы и боя) -->
-            <div id="turn-order-box" class="turn-order-box" style="display:none;">
-              <div class="turn-order-head">
-                <div class="turn-order-title">Очередность хода</div>
-
+    <!-- Очередность хода (видно в фазе инициативы и боя) -->
+    <div id="turn-order-box" class="turn-order-box" style="display:none;">
+      <div class="turn-order-head">
+        <div class="turn-order-title">Очередность хода</div>
+        <div class="turn-order-round">Круг - <span id="turn-order-round">1</span></div>
+      </div>
+      <ul id="turn-order-list" class="turn-order-list"></ul>
     </div>
 
   </div>
@@ -137,10 +140,6 @@
         <div id="board-col">
 
           <div id="board-topbar">
-<div class="turn-order-round">Круг - <span id="turn-order-round">1</span></div>
-              </div>
-              <ul id="turn-order-list" class="turn-order-list"></ul>
-            </div>
 
             <!-- Текущий игрок — по центру поля, над рамками размеров -->
             <div id="current-turn">
@@ -150,7 +149,7 @@
               </button>
             </div>
 
-            <div id="board-settings">
+            <div id="board-settings" class="board-settings-row">
             <div id="board-settings-viewport" class="board-settings-box">
               <label>Ширина поля:
                 <input type="number" id="board-width" value="10" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
@@ -162,7 +161,7 @@
             </div>
 
             <!-- Только для GM: реальный размер карты (количество клеток внутри поля) -->
-            <div id="board-settings-gm" class="board-settings-box" style="margin-top:8px;">
+            <div id="board-settings-gm" class="board-settings-box">
               <label>Ширина поля (ГМ):
                 <input type="number" id="board-width-gm" value="10" min="5" max="150" title="Реальная ширина карты в клетках (5–150)">
               </label>
@@ -258,14 +257,17 @@
   </div>
 </div>
 
-<!-- Other players dice feed (above dice panel) -->
-<div id="dice-others" class="dice-others">
-  <div class="dice-others__title">Броски других</div>
-</div>
+<!-- Dice stack (bottom-left): "Броски других" + "Бросок" -->
+<div id="dice-stack" class="dice-stack">
 
-<!-- Dice Visualizer (bottom-left) -->
-<div id="dice-viz" class="dice-viz">
-  <div class="dice-viz-title">Бросок</div>
+  <!-- "Броски других" (видно всем) -->
+  <div id="dice-others" class="dice-others dice-others--inline" aria-live="polite">
+    <div class="dice-others__title">Броски других</div>
+  </div>
+
+  <!-- Dice Visualizer -->
+  <div id="dice-viz" class="dice-viz">
+    <div class="dice-viz-title">Бросок</div>
 
   <!-- Инициатива: отдельная кнопка внутри панели, НЕ выпирает -->
   <button id="roll-initiative" class="dice-viz-btn dice-viz-btn--initiative" type="button">
@@ -296,7 +298,7 @@
     <button id="roll" class="dice-viz-btn dice-viz-btn--roll" type="button">Бросить</button>
   </div>
 
-  <canvas id="dice-canvas" width="200" height="110"></canvas>
+  <canvas id="dice-canvas" width="220" height="140"></canvas>
 
   <div id="dice-rolls" class="dice-viz-rolls" aria-label="Результаты броска"></div>
 
@@ -304,6 +306,8 @@
     <span id="dice-viz-kind">d20 × 1</span>
     <span id="dice-viz-value">—</span>
   </div>
+  </div>
+
 </div>
 
 </div><!-- /#main-container -->
