@@ -1017,6 +1017,12 @@ function updatePlayerList() {
       const actions = document.createElement('div');
       actions.className = 'player-actions';
 
+      // две строки: сверху кнопки, снизу размер+цвет
+      const topRow = document.createElement('div');
+      topRow.className = 'player-actions-top';
+      const bottomRow = document.createElement('div');
+      bottomRow.className = 'player-actions-bottom';
+
       // ===== Новый игрок во время боя: выбор инициативы (только для него) =====
       if (lastState && lastState.phase === 'combat' && p.pendingInitiativeChoice && (myRole === 'GM' || p.ownerId === myId)) {
         const box = document.createElement('div');
@@ -1044,21 +1050,21 @@ function updatePlayerList() {
 
         box.appendChild(rollInitBtn);
         box.appendChild(baseInitBtn);
-        actions.appendChild(box);
+        topRow.appendChild(box);
       }
 
-      // КНОПКА "ИНФА" — теперь вызывает внешний модуль
+      // КНОПКА "Лист персонажа" — теперь вызывает внешний модуль
       if (p.isBase) {
         const infoBtn = document.createElement('button');
-        infoBtn.textContent = 'Инфа';
+        infoBtn.textContent = 'Лист персонажа';
         infoBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           window.InfoModal?.open?.(p);
         });
-        actions.appendChild(infoBtn);
+        topRow.appendChild(infoBtn);
       }
 
-      // изменение размера
+      // изменение размера + цвет (рядом), но визуально НИЖЕ кнопок
       if (myRole === "GM" || p.ownerId === myId) {
         const sizeSelect = document.createElement('select');
         sizeSelect.className = 'size-select';
@@ -1069,14 +1075,24 @@ function updatePlayerList() {
           if (s === p.size) opt.selected = true;
           sizeSelect.appendChild(opt);
         }
-
         sizeSelect.addEventListener('click', (e) => e.stopPropagation());
         sizeSelect.addEventListener('change', (e) => {
           e.stopPropagation();
           sendMessage({ type: 'updatePlayerSize', id: p.id, size: parseInt(sizeSelect.value, 10) });
         });
 
-        actions.appendChild(sizeSelect);
+        const colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.className = 'player-color-input';
+        colorInput.value = (typeof p.color === 'string' && p.color) ? p.color : '#ff0000';
+        colorInput.addEventListener('click', (e) => e.stopPropagation());
+        colorInput.addEventListener('change', (e) => {
+          e.stopPropagation();
+          sendMessage({ type: 'updatePlayerColor', id: p.id, color: colorInput.value });
+        });
+
+        bottomRow.appendChild(sizeSelect);
+        bottomRow.appendChild(colorInput);
       }
 
       li.addEventListener('click', () => {
@@ -1107,9 +1123,12 @@ function updatePlayerList() {
           sendMessage({ type: 'removePlayerCompletely', id: p.id });
         };
 
-        actions.appendChild(removeFromBoardBtn);
-        actions.appendChild(removeCompletelyBtn);
+        topRow.appendChild(removeFromBoardBtn);
+        topRow.appendChild(removeCompletelyBtn);
       }
+
+      actions.appendChild(topRow);
+      actions.appendChild(bottomRow);
 
       li.appendChild(actions);
       ul.appendChild(li);
@@ -2235,7 +2254,17 @@ function getDexMod(player) {
     const dex = player?.sheet?.parsed?.stats?.dex?.value;
     const n = Number(dex);
     if (!Number.isFinite(n)) return 0;
-    return Math.floor((n - 10) / 2);
+
+    // Логика модификаторов (как в навыках/характеристиках в этом проекте):
+    // 10-12 => +0
+    // 13-14 => +1
+    // 15-16 => +2
+    // 8-9   => -1
+    // 6-7   => -2
+    // и т.д.
+    if (n >= 13) return Math.floor((n - 12) / 2);
+    if (n >= 10) return 0;
+    return -Math.floor((11 - n) / 2);
   } catch {
     return 0;
   }
@@ -3000,6 +3029,17 @@ async function sendMessage(msg) {
           }
           p.size = newSize;
           logEventToState(next, `${p.name} изменил размер на ${p.size}x${p.size}`);
+        }
+
+        else if (type === "updatePlayerColor") {
+          const p = (next.players || []).find(pp => pp.id === msg.id);
+          if (!p) return;
+          if (!isGM && !ownsPlayer(p)) return;
+          const color = String(msg.color || "").trim();
+          // Простой валидатор hex-цвета
+          if (!/^#([0-9a-fA-F]{6})$/.test(color)) return;
+          p.color = color;
+          logEventToState(next, `${p.name} изменил цвет`);
         }
 
         else if (type === "removePlayerFromBoard") {
