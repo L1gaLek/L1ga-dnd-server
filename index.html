@@ -130,18 +130,15 @@
         <!-- Левая часть (ширина = ширина поля). Всё, что "над полем", центрируется относительно поля -->
         <div id="board-col">
 
-          <div id="board-topbar">
+          <div id="current-turn">
+            Текущий игрок: <span id="current-player">-</span>
+            <button id="next-turn" class="next-turn-btn" type="button" title="Конец хода (по инициативе)">
+              Конец хода
+            </button>
+          </div>
 
-            <!-- Текущий игрок — по центру поля, над рамками размеров -->
-            <div id="current-turn">
-              Текущий игрок: <span id="current-player">-</span>
-              <button id="next-turn" class="next-turn-btn" type="button" title="Конец хода (по инициативе)">
-                Конец хода
-              </button>
-            </div>
-
-            <div id="board-settings">
-            <div id="board-settings-viewport" class="board-settings-box">
+          <div id="board-settings">
+            <div class="board-settings-row">
               <label>Ширина поля:
                 <input type="number" id="board-width" value="10" min="5" max="80" title="Сколько клеток видно в рамке (персональная настройка)">
               </label>
@@ -152,24 +149,19 @@
             </div>
 
             <!-- Только для GM: реальный размер карты (количество клеток внутри поля) -->
-            <div id="board-settings-gm" class="board-settings-box" style="margin-top:8px;">
+            <div id="board-settings-gm" class="board-settings-row" style="margin-top:8px;">
               <label>Ширина поля (ГМ):
-                <input type="number" id="board-width-gm" value="10" min="5" max="150" title="Реальная ширина карты в клетках (5–150)">
+                <input type="number" id="board-width-gm" value="20" min="20" max="150" title="Реальная ширина карты в клетках (20–150)">
               </label>
               <label>Высота поля (ГМ):
-                <input type="number" id="board-height-gm" value="10" min="5" max="150" title="Реальная высота карты в клетках (5–150)">
+                <input type="number" id="board-height-gm" value="20" min="20" max="150" title="Реальная высота карты в клетках (20–150)">
               </label>
               <button id="create-board-gm" type="button" title="Изменить реальный размер карты (видно всем)">Применить карту</button>
             </div>
-            </div>
-
           </div>
 
           <div id="board-wrapper">
-            <div id="game-board">
-              <!-- Подложка карты (ГМ загружает картинку/.gif). Растягивается на весь размер поля. -->
-              <div id="board-bg" aria-hidden="true"></div>
-            </div>
+            <div id="game-board"></div>
           </div>
 
           <div id="initiative-warning" style="display:none; color: orange; font-weight: bold;">
@@ -194,28 +186,20 @@
             <button id="add-wall" disabled>Добавить стену</button>
             <button id="remove-wall" disabled>Удалить стену</button>
 
+            <div class="env-divider"></div>
+
             <div class="env-bg-controls">
               <div class="env-bg-title">Подложка карты</div>
               <input id="board-bg-file" type="file" accept="image/*,.gif" />
-              <button id="board-bg-clear" type="button">Убрать подложку</button>
-            </div>
-
-            <div class="campaign-maps-controls">
-              <div class="campaign-maps-title">Карты кампании</div>
-              <div class="campaign-maps-row">
-                <div class="campaign-active-map" title="Текущая выбранная карта">
-                  Активная: <span id="campaign-active-map-name">—</span>
-                </div>
-                <button id="campaign-params" type="button">Параметры</button>
+              <div class="env-bg-url-row">
+                <input id="board-bg-url" type="text" placeholder="URL картинки/.gif (hotlink)" />
+                <button id="board-bg-apply-url" type="button">Применить URL</button>
               </div>
-              <!-- Старые элементы оставлены для совместимости, но скрыты (управление в окне «Параметры») -->
-              <select id="campaign-maps-select" title="Выбор карты" style="display:none"></select>
-              <button id="create-campaign-map" type="button" style="display:none">Создать карту</button>
+              <button id="board-bg-clear" type="button">Убрать подложку</button>
+              <div class="env-bg-help">
+                Работает, если сайт разрешает встраивание (hotlink). Если не отображается — загрузите файл.
+              </div>
             </div>
-
-            <button id="save-campaign" type="button">Сохранить кампанию</button>
-            <button id="load-campaign" type="button">Загрузить кампанию</button>
-
             <button id="clear-board">Очистить поле</button>
             <button id="reset-game">Сбросить игру полностью</button>
           </div>
@@ -298,12 +282,12 @@
   window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3dHhpc2d4aWtiZGR6cXdwenNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1ODM5ODEsImV4cCI6MjA4NjE1OTk4MX0.gLCl7G-J8WvEVMcfQgzDRe-NCfrzCMLOFZ-51Ph5QRM";
   // Optional: Edge Function URL for CORS proxy (dnd.su spell pages)
   // Example: https://<project-ref>.functions.supabase.co/fetch
-  window.SUPABASE_FETCH_FN = "fetch";
+  window.SUPABASE_FETCH_FN = "PASTE_SUPABASE_FETCH_FN_URL_HERE";
 </script>
 
-  <script src="controlbox.js"></script>
-<script src="client.js"></script>
 <script src="info-dnd-player.js" defer></script>
+<script src="controlbox.js"></script>
+<script src="client.js"></script>
 
 </body>
 </html>
