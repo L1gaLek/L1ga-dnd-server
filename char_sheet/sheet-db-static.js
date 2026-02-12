@@ -75,6 +75,14 @@ function normalizeLanguagesLearned(raw) {
     .filter(x => x.name);
 }
 
+  // Expose helpers for other modules (monolith/backward-compat)
+CS.utils = CS.utils || {};
+CS.utils.extractLanguagesHint = extractLanguagesHint;
+CS.utils.normalizeLanguagesLearned = normalizeLanguagesLearned;
+// Some modules still reference these as globals
+window.extractLanguagesHint = extractLanguagesHint;
+window.normalizeLanguagesLearned = normalizeLanguagesLearned;
+
 
 function openLanguagesPopup(player) {
   if (!player?.sheet?.parsed) return;
