@@ -1132,7 +1132,14 @@ function bindCombatEditors(root, player, canEdit) {
   // ================== PUBLIC API ==================
   function init(context) {
     ctx = context || null;
-    ensureWiredCloseHandlers();
+    // After splitting into modules this helper lives in sheet-db-static.js.
+    // Keep init safe even if some scripts load out-of-order.
+    try {
+      const CS = window.CharSheet;
+      CS?.db?.ensureWiredCloseHandlers?.();
+    } catch (e) {
+      console.warn('[CharSheet] ensureWiredCloseHandlers failed', e);
+    }
   }
 
   function open(player) {
