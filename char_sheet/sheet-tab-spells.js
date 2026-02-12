@@ -1653,4 +1653,9 @@ function renderCombatTab(vm) {
   CSX.tabs.renderCombatTab = renderCombatTab;
   window.renderCombatTab = renderCombatTab;
 
+
+  // Also expose spell tab binders as globals (backward-compat)
+  window.bindSlotEditors = bindSlotEditors;
+  window.bindSpellAddAndDesc = bindSpellAddAndDesc;
+
 })();
