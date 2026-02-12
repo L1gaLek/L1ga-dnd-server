@@ -6,6 +6,9 @@
   CS.dom = CS.dom || {};
   CS.modal = CS.modal || {};
   CS.db = CS.db || {};
+  // DOM refs are owned by sheet-modal.js, but we keep safe fallbacks here.
+  const getSheetModalEl = () => CS.dom?.sheetModal || document.getElementById('sheet-modal');
+  const getSheetContentEl = () => CS.dom?.sheetContent || document.getElementById('sheet-content');
   const uiStateByPlayerId = new Map();
 
   // debounce save timers
@@ -47,7 +50,7 @@
     if (!uiStateByPlayerId.has(playerId)) {
       uiStateByPlayerId.set(playerId, { activeTab: "basic", scrollTopByTab: {}, lastInteractAt: 0 });
     }
-    return uiStateByPlayerId.CS.utils.get(playerId);
+    return uiStateByPlayerId.get(playerId);
   }
 
   function captureUiStateFromDom(player) {
@@ -56,6 +59,7 @@
     const activeTab = player._activeSheetTab || st.activeTab || "basic";
     st.activeTab = activeTab;
 
+    const sheetContent = getSheetContentEl();
     const main = sheetContent?.querySelector?.("#sheet-main");
     if (main) {
       st.scrollTopByTab[activeTab] = main.scrollTop || 0;
@@ -66,6 +70,7 @@
     if (!player?.id) return;
     const st = getUiState(player.id);
     const activeTab = player._activeSheetTab || st.activeTab || "basic";
+    const sheetContent = getSheetContentEl();
     const main = sheetContent?.querySelector?.("#sheet-main");
     if (main && st.scrollTopByTab && typeof st.scrollTopByTab[activeTab] === "number") {
       main.scrollTop = st.scrollTopByTab[activeTab];
@@ -79,6 +84,7 @@
   }
 
   function isModalBusy(playerId) {
+    const sheetModal = getSheetModalEl();
     if (!sheetModal || sheetModal.classList.contains('hidden')) return false;
     const activeEl = document.activeElement;
     if (activeEl && sheetModal.contains(activeEl)) return true;
