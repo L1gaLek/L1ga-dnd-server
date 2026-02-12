@@ -202,6 +202,17 @@ function applyRoleToUI() {
   const pm = document.getElementById('player-management');
   if (pm) pm.style.display = spectator ? 'none' : '';
 
+  // Галочка "Союзник" видна только для ГМ
+  try {
+    if (typeof isAllyCheckbox !== 'undefined' && isAllyCheckbox) {
+      const label = isAllyCheckbox.closest('label');
+      if (label) label.style.display = gm ? '' : 'none';
+      else isAllyCheckbox.style.display = gm ? '' : 'none';
+
+      if (!gm) isAllyCheckbox.checked = false;
+    }
+  } catch {}
+
 
   // Disable GM-only buttons defensively
   const gmOnlyIds = [
