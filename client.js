@@ -81,6 +81,21 @@ const boardBgClearBtn = document.getElementById('board-bg-clear');
 const boardBgUrlInput = document.getElementById('board-bg-url');
 const boardBgUrlApplyBtn = document.getElementById('board-bg-url-apply');
 
+// ================== TOKEN QUICK POPUP (reliable dblclick) ==================
+// Иногда dblclick на токене может "съедаться" из‑за drag/select логики.
+// Поэтому ловим dblclick на всём поле в capture и открываем попап по id токена.
+try {
+  board?.addEventListener('dblclick', (ev) => {
+    const token = ev.target?.closest?.('.player');
+    if (!token) return;
+    const pid = token.getAttribute('data-player-id');
+    if (!pid) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    openTokenQuickPopup(pid);
+  }, true);
+} catch {}
+
 // Очередность хода (над полем слева)
 const turnOrderBox = document.getElementById('turn-order-box');
 const turnOrderList = document.getElementById('turn-order-list');
@@ -750,16 +765,6 @@ loginDiv.style.display = 'none';
         if (!existingIds.has(id)) {
           el.remove();
           playerElements.delete(id);
-
-          // убираем HP-полоску, иначе она остаётся на поле
-          const hb = hpBarElements.get(id);
-          if (hb) hb.remove();
-          hpBarElements.delete(id);
-
-          // если было открыто мини-окно на этом токене — закрываем
-          if (tokenQuickPopupForId && String(tokenQuickPopupForId) === String(id)) {
-            closeTokenQuickPopup();
-          }
         }
       });
 
@@ -1272,6 +1277,7 @@ function setPlayerPosition(player) {
   if (!el) {
     el = document.createElement('div');
     el.classList.add('player');
+    el.setAttribute('data-player-id', String(player.id));
     el.textContent = player.name?.[0] || '?';
     el.style.backgroundColor = player.color;
     el.style.position = 'absolute';
@@ -1290,9 +1296,8 @@ function setPlayerPosition(player) {
     // HP bar overlay (always on top)
     if (!hpBarElements.has(player.id)) {
       const hb = document.createElement('div');
-      hb.className = 'token-hpbar';
+      hb.className = 'hp-bar';
       hb.setAttribute('data-hp-player', String(player.id));
-      hb.innerHTML = `<div class="fill"></div><div class="temp"></div><div class="txt"></div>`;
       board.appendChild(hb);
       hpBarElements.set(player.id, hb);
     }
@@ -1307,6 +1312,9 @@ function setPlayerPosition(player) {
     playerElements.set(player.id, el);
     player.element = el;
   }
+
+  // на всякий случай обновляем id (если элемент переиспользуется)
+  el.setAttribute('data-player-id', String(player.id));
 
   el.textContent = player.name ? player.name[0] : '?';
   el.style.backgroundColor = player.color;
@@ -1352,12 +1360,6 @@ function updateHpBarForPlayer(player, tokenEl) {
   const hb = hpBarElements.get(player.id);
   if (!hb || !tokenEl) return;
 
-  // на всякий случай — если элемент создан старой версией
-  if (!hb.classList.contains('token-hpbar')) {
-    hb.className = 'token-hpbar';
-    hb.innerHTML = `<div class="fill"></div><div class="temp"></div><div class="txt"></div>`;
-  }
-
   hb.style.display = '';
   hb.style.position = 'absolute';
   hb.style.left = tokenEl.style.left || `${tokenEl.offsetLeft}px`;
@@ -1378,17 +1380,13 @@ function updateHpBarForPlayer(player, tokenEl) {
     ? Math.max(0, Math.min(100, Math.round((safeTemp / safeMax) * 100)))
     : 0;
 
-  const fillEl = hb.querySelector('.fill');
-  const tempEl = hb.querySelector('.temp');
-  const txtEl = hb.querySelector('.txt');
-  if (fillEl) fillEl.style.width = `${percent}%`;
-  if (tempEl) {
-    tempEl.style.width = safeTemp > 0 ? `${tempPercent}%` : '0%';
-    tempEl.style.display = safeTemp > 0 ? '' : 'none';
-  }
-  if (txtEl) {
-    txtEl.textContent = `${safeCur}/${safeMax}${safeTemp > 0 ? `+${safeTemp}` : ``}`;
-  }
+  hb.innerHTML = `
+    <div class="hp-bar__track">
+      <div class="hp-bar__fill" style="width:${percent}%"></div>
+      ${safeTemp > 0 ? `<div class="hp-bar__temp" style="width:${tempPercent}%"></div>` : ``}
+    </div>
+    <div class="hp-bar__text">${safeCur}/${safeMax}${safeTemp > 0 ? `+${safeTemp}` : ``}</div>
+  `;
 }
 
 function closeTokenQuickPopup() {
@@ -1420,8 +1418,7 @@ function openTokenQuickPopup(playerId) {
   const lvl = Number(sheet?.info?.level?.value) || 1;
 
   const stats = sheet?.stats || {};
-  // порядок для сетки 2 колонки: слева СИЛ/ЛОВ/ТЕЛ, справа ИНТ/МУД/ХАР
-  const statIds = ["str", "int", "dex", "wis", "con", "cha"];
+  const statIds = ["str", "dex", "con", "int", "wis", "cha"];
   const statLabels = { str: "СИЛ", dex: "ЛОВ", con: "ТЕЛ", int: "ИНТ", wis: "МУД", cha: "ХАР" };
 
   tokenQuickPopupEl = document.createElement('div');
@@ -1447,12 +1444,6 @@ function openTokenQuickPopup(playerId) {
       <input class="tqp-inp" type="number" min="0" max="999" step="1" data-tqp-hp="max" value="${escapeHtml(String(max || 0))}" ${canEdit ? "" : "disabled"}>
       <span class="tqp-temp">+</span>
       <input class="tqp-inp tqp-inp--temp" type="number" min="0" max="999" step="1" data-tqp-hp="temp" value="${escapeHtml(String(temp || 0))}" ${canEdit ? "" : "disabled"}>
-    </div>
-
-    <div class="tqp-row tqp-row--delta">
-      <button class="tqp-dbtn" type="button" data-tqp-delta="-" ${canEdit ? "" : "disabled"}>−</button>
-      <input class="tqp-delta" type="number" min="0" max="999" step="1" value="1" ${canEdit ? "" : "disabled"}>
-      <button class="tqp-dbtn" type="button" data-tqp-delta="+" ${canEdit ? "" : "disabled"}>+</button>
     </div>
 
     <div class="tqp-grid3">
@@ -1502,28 +1493,11 @@ function openTokenQuickPopup(playerId) {
       return;
     }
 
-    const deltaBtn = t && t.closest && t.closest('[data-tqp-delta]');
-    if (deltaBtn && canEdit) {
-      const sign = String(deltaBtn.getAttribute('data-tqp-delta') || '').trim();
-      const root = tokenQuickPopupEl;
-      const curEl = root.querySelector('[data-tqp-hp="cur"]');
-      const maxEl = root.querySelector('[data-tqp-hp="max"]');
-      const deltaEl = root.querySelector('.tqp-delta');
-      const delta = clampInt(deltaEl?.value, 0, 999);
-      const curV = clampInt(curEl?.value, 0, 999);
-      const maxV = clampInt(maxEl?.value, 0, 999);
-
-      const next = (sign === '+') ? (curV + delta) : (curV - delta);
-      if (curEl) curEl.value = String(Math.max(0, Math.min(maxV, next)));
-      scheduleSave();
-      return;
-    }
-
     const openBtn = t && t.closest && t.closest('[data-tqp-open-sheet]');
     if (openBtn) {
       try {
         if (window.InfoModal && typeof window.InfoModal.open === 'function') {
-          window.InfoModal.open(p);
+          window.InfoModal.open(playerId);
         } else if (typeof window.openCharacterSheet === 'function') {
           window.openCharacterSheet(playerId);
         } else {
@@ -1547,7 +1521,7 @@ function openTokenQuickPopup(playerId) {
   board.addEventListener('mousedown', onOutside, true);
 
   let saveT = null;
-  function scheduleSave() {
+  const scheduleSave = () => {
     if (!canEdit) return;
     if (saveT) clearTimeout(saveT);
     saveT = setTimeout(() => {
@@ -1576,7 +1550,7 @@ function openTokenQuickPopup(playerId) {
       sendMessage({ type: 'setPlayerSheet', id: playerId, sheet: live.sheet });
       updateHpBarForPlayer(live, tokenEl);
     }, 250);
-  }
+  };
 
   tokenQuickPopupEl.addEventListener('input', (e) => {
     const el = e.target;
