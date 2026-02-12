@@ -39,6 +39,20 @@
   let ctx = null;
 
   function canEditPlayer(player) {
+
+
+  // Convert viewmodel numeric-like values to safe strings for <input type="number">.
+  // ViewModel uses "-" as a fallback; number inputs cannot parse "-".
+  function safeNumAttr(v) {
+    if (v === null || v === undefined) return "";
+    const s = String(v).trim();
+    if (!s || s === "-") return "";
+    // allow integers/decimals with optional leading minus (just in case), but reject lone "-"
+    if (!/^[-+]?\d+(?:\.\d+)?$/.test(s)) return "";
+    return CS.utils.escapeHtml(s);
+  }
+
+
     // client.js передаёт в init() функции getMyRole()/getMyId().
     // Важно: не полагаемся на ctx.myRole/ctx.myId (их может не быть),
     // иначе у игроков отключаются клики/выборы в "Основное".
@@ -1058,12 +1072,12 @@ function bindCombatEditors(root, player, canEdit) {
             </div>
             <div class="sheet-chip" data-hero="prof" title="Бонус мастерства">
               <div class="k">Владение</div>
-              <input class="sheet-chip-input" type="number" min="0" max="10" ${canEdit ? "" : "disabled"} data-sheet-path="proficiency" value="${CS.utils.escapeHtml(String(vm.profBonus))}">
+              <input class="sheet-chip-input" type="number" min="0" max="10" ${canEdit ? "" : "disabled"} data-sheet-path="proficiency" value="${safeNumAttr(vm.profBonus)}">
             </div>
 
             <div class="sheet-chip" data-hero="ac">
               <div class="k">Броня</div>
-              <input class="sheet-chip-input" type="number" min="0" max="40" ${canEdit ? "" : "disabled"} data-sheet-path="vitality.ac.value" data-hero-val="ac" value="${CS.utils.escapeHtml(String(vm.ac))}">
+              <input class="sheet-chip-input" type="number" min="0" max="40" ${canEdit ? "" : "disabled"} data-sheet-path="vitality.ac.value" data-hero-val="ac" value="${safeNumAttr(vm.ac)}">
             </div>
             <div class="sheet-chip sheet-chip--hp" data-hero="hp" data-hp-open role="button" tabindex="0" style="--hp-fill-pct:${CS.utils.escapeHtml(String(vm.hp ? Math.max(0, Math.min(100, Math.round((Number(vm.hpCur) / Math.max(1, Number(vm.hp))) * 100))) : 0))}%">
               <div class="hp-liquid" aria-hidden="true"></div>
@@ -1072,7 +1086,7 @@ function bindCombatEditors(root, player, canEdit) {
             </div>
             <div class="sheet-chip" data-hero="speed">
               <div class="k">Скорость</div>
-              <input class="sheet-chip-input" type="number" min="0" max="200" ${canEdit ? "" : "disabled"} data-sheet-path="vitality.speed.value" data-hero-val="speed" value="${CS.utils.escapeHtml(String(vm.spd))}">
+              <input class="sheet-chip-input" type="number" min="0" max="200" ${canEdit ? "" : "disabled"} data-sheet-path="vitality.speed.value" data-hero-val="speed" value="${safeNumAttr(vm.spd)}">
             </div>
           </div>
           </div>
@@ -1245,5 +1259,6 @@ function bindCombatEditors(root, player, canEdit) {
     onSavedBaseDeleted
   };
 })();
+
 
 
