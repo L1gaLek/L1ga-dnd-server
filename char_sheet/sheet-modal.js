@@ -874,7 +874,7 @@ function bindCombatEditors(root, player, canEdit) {
     }
 
     // сохраняем текущую вкладку/скролл перед любым ререндером
-    captureUiStateFromDom(player);
+    CS.bindings.captureUiStateFromDom(player);
 
     const myRole = ctx.getMyRole?.();
     const myId = ctx.getMyId?.();
@@ -1073,7 +1073,7 @@ function bindCombatEditors(root, player, canEdit) {
     mainEl?.addEventListener('scroll', () => {
       CS.bindings.markModalInteracted(player.id);
       // и сохраняем текущий скролл в uiState
-      captureUiStateFromDom(player);
+      CS.bindings.captureUiStateFromDom(player);
     }, { passive: true });
 
     sheetContent.addEventListener('pointerdown', () => CS.bindings.markModalInteracted(player.id), { passive: true });
