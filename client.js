@@ -54,6 +54,7 @@ const playerColorInput = document.getElementById('player-color');
 const playerSizeInput = document.getElementById('player-size');
 
 const isBaseCheckbox = document.getElementById('is-base');
+const isAllyCheckbox = document.getElementById('is-ally');
 
 const dice = document.getElementById('dice');
 const diceCountInput = document.getElementById('dice-count');
@@ -200,6 +201,13 @@ function applyRoleToUI() {
   // "Управление игроками" используется всеми, кроме зрителей
   const pm = document.getElementById('player-management');
   if (pm) pm.style.display = spectator ? 'none' : '';
+
+  // чекбокс "Союзник" — только для GM
+  if (isAllyCheckbox) {
+    isAllyCheckbox.disabled = !gm;
+    const lbl = isAllyCheckbox.closest('label');
+    if (lbl) lbl.style.opacity = gm ? '' : '0.45';
+  }
 
 
   // Disable GM-only buttons defensively
@@ -1244,6 +1252,239 @@ function renderBoard(state) {
   players.forEach(p => setPlayerPosition(p));
 }
 
+// ================== TOKEN HELPERS (HP + QUICK POPUP) ==================
+function ensureParsedSheet(player) {
+  if (!player) return null;
+  if (!player.sheet || typeof player.sheet !== 'object') player.sheet = { parsed: { name: { value: player.name || '-' } } };
+  if (!player.sheet.parsed || typeof player.sheet.parsed !== 'object') player.sheet.parsed = { name: { value: player.name || '-' } };
+  const s = player.sheet.parsed;
+  if (!s.vitality || typeof s.vitality !== 'object') s.vitality = {};
+  if (!s.vitality['hp-max']) s.vitality['hp-max'] = { value: 0 };
+  if (!s.vitality['hp-current']) s.vitality['hp-current'] = { value: 0 };
+  if (!s.vitality['hp-temp']) s.vitality['hp-temp'] = { value: 0 };
+  if (!s.vitality.ac) s.vitality.ac = { value: 0 };
+  if (!s.vitality.speed) s.vitality.speed = { value: 0 };
+  if (!s.info || typeof s.info !== 'object') s.info = { level: { value: 1 } };
+  if (!s.info.level) s.info.level = { value: 1 };
+  if (!s.stats || typeof s.stats !== 'object') {
+    s.stats = {
+      str: { score: 10, modifier: 0, label: 'Сила', check: 0 },
+      dex: { score: 10, modifier: 0, label: 'Ловкость', check: 0 },
+      con: { score: 10, modifier: 0, label: 'Телосложение', check: 0 },
+      int: { score: 10, modifier: 0, label: 'Интеллект', check: 0 },
+      wis: { score: 10, modifier: 0, label: 'Мудрость', check: 0 },
+      cha: { score: 10, modifier: 0, label: 'Харизма', check: 0 }
+    };
+  }
+  return s;
+}
+
+function getHp(player) {
+  const s = player?.sheet?.parsed;
+  const max = Math.max(0, Number(s?.vitality?.['hp-max']?.value) || 0);
+  const cur = Math.max(0, Number(s?.vitality?.['hp-current']?.value) || 0);
+  const temp = Math.max(0, Number(s?.vitality?.['hp-temp']?.value) || 0);
+  return { cur, max, temp };
+}
+
+function ensureTokenUi(el) {
+  if (!el) return;
+  if (el.querySelector('.token-letter')) return;
+  const letter = document.createElement('div');
+  letter.className = 'token-letter';
+
+  const ch = document.createElement('div');
+  ch.className = 'token-char';
+  ch.textContent = '?';
+  letter.appendChild(ch);
+
+  const hp = document.createElement('div');
+  hp.className = 'token-hp';
+  hp.innerHTML = `<div class="token-hp-fill"></div><div class="token-hp-text"></div>`;
+  letter.appendChild(hp);
+  el.textContent = '';
+  el.appendChild(letter);
+}
+
+function updateTokenHpUi(player, el) {
+  if (!player || !el) return;
+  const hp = getHp(player);
+  const wrap = el.querySelector('.token-hp');
+  const fill = el.querySelector('.token-hp-fill');
+  const text = el.querySelector('.token-hp-text');
+  if (!wrap || !fill || !text) return;
+  const denom = Math.max(1, hp.max || 0);
+  const pct = Math.max(0, Math.min(100, Math.round((hp.cur / denom) * 100)));
+  fill.style.width = `${pct}%`;
+  const tempText = hp.temp ? ` (+${hp.temp})` : '';
+  text.textContent = `${hp.cur}/${hp.max}${tempText}`;
+}
+
+const tokenSheetSaveTimers = new Map();
+function scheduleTokenSheetSave(player) {
+  if (!player?.id) return;
+  const prev = tokenSheetSaveTimers.get(player.id);
+  if (prev) clearTimeout(prev);
+  const t = setTimeout(() => {
+    sendMessage({ type: 'setPlayerSheet', id: player.id, sheet: player.sheet });
+    tokenSheetSaveTimers.delete(player.id);
+  }, 450);
+  tokenSheetSaveTimers.set(player.id, t);
+}
+
+let tokenQuickEl = null;
+let tokenQuickPlayerId = null;
+
+function ensureTokenQuickPopup() {
+  if (tokenQuickEl) return tokenQuickEl;
+  tokenQuickEl = document.createElement('div');
+  tokenQuickEl.className = 'token-quick hidden';
+  tokenQuickEl.innerHTML = `
+    <div class="tq-title" data-tq-title>Персонаж</div>
+    <div class="tq-grid">
+      <div class="tq-row"><div class="tq-k">Здоровье</div><div class="tq-v"><input class="tq-inp" type="number" min="0" max="999" step="1" data-tq-hp="cur"> / <input class="tq-inp" type="number" min="0" max="999" step="1" data-tq-hp="max"></div></div>
+      <div class="tq-row"><div class="tq-k">Класс защиты</div><div class="tq-v" data-tq-ac>—</div></div>
+      <div class="tq-row"><div class="tq-k">Скорость</div><div class="tq-v" data-tq-speed>—</div></div>
+      <div class="tq-row"><div class="tq-k">Уровень</div><div class="tq-v" data-tq-level>—</div></div>
+    </div>
+    <div class="tq-grid" style="margin-top:8px;">
+      <div class="tq-row"><div class="tq-k">СИЛ</div><div class="tq-v" data-tq-stat="str">—</div></div>
+      <div class="tq-row"><div class="tq-k">ЛОВ</div><div class="tq-v" data-tq-stat="dex">—</div></div>
+      <div class="tq-row"><div class="tq-k">ТЕЛ</div><div class="tq-v" data-tq-stat="con">—</div></div>
+      <div class="tq-row"><div class="tq-k">ИНТ</div><div class="tq-v" data-tq-stat="int">—</div></div>
+      <div class="tq-row"><div class="tq-k">МУД</div><div class="tq-v" data-tq-stat="wis">—</div></div>
+      <div class="tq-row"><div class="tq-k">ХАР</div><div class="tq-v" data-tq-stat="cha">—</div></div>
+    </div>
+    <div class="tq-actions">
+      <button type="button" data-tq-open-sheet>Лист персонажа</button>
+      <button type="button" data-tq-close>Закрыть</button>
+    </div>
+  `;
+
+  tokenQuickEl.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    if (t.closest('[data-tq-close]')) {
+      hideTokenQuickPopup();
+      return;
+    }
+    const openBtn = t.closest('[data-tq-open-sheet]');
+    if (openBtn) {
+      const p = players.find(x => String(x?.id) === String(tokenQuickPlayerId));
+      if (p) window.InfoModal?.open?.(p);
+      hideTokenQuickPopup();
+    }
+  });
+
+  tokenQuickEl.addEventListener('input', (e) => {
+    const inp = e.target;
+    if (!(inp instanceof HTMLInputElement)) return;
+    const kind = inp.getAttribute('data-tq-hp');
+    if (!kind) return;
+
+    const p = players.find(x => String(x?.id) === String(tokenQuickPlayerId));
+    if (!p) return;
+
+    const canEdit = (String(myRole || '') === 'GM') || (String(p.ownerId || '') && String(p.ownerId) === String(myId || ''));
+    if (!canEdit) return;
+
+    const sheet = ensureParsedSheet(p);
+    if (!sheet) return;
+    const v = Math.max(0, Math.min(999, Number(inp.value) || 0));
+    if (kind === 'max') sheet.vitality['hp-max'].value = v;
+    if (kind === 'cur') sheet.vitality['hp-current'].value = v;
+
+    const max = Math.max(0, Number(sheet.vitality['hp-max'].value) || 0);
+    const cur = Math.max(0, Number(sheet.vitality['hp-current'].value) || 0);
+    sheet.vitality['hp-current'].value = Math.min(cur, max || cur);
+
+    const tokenEl = playerElements.get(p.id);
+    if (tokenEl) updateTokenHpUi(p, tokenEl);
+    fillTokenQuickPopup(p);
+    scheduleTokenSheetSave(p);
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (!tokenQuickEl || tokenQuickEl.classList.contains('hidden')) return;
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    if (tokenQuickEl.contains(t)) return;
+    if (t.closest('.player')) return;
+    hideTokenQuickPopup();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideTokenQuickPopup();
+  });
+
+  board.appendChild(tokenQuickEl);
+  return tokenQuickEl;
+}
+
+function hideTokenQuickPopup() {
+  if (!tokenQuickEl) return;
+  tokenQuickEl.classList.add('hidden');
+  tokenQuickPlayerId = null;
+}
+
+function fillTokenQuickPopup(player) {
+  if (!tokenQuickEl || !player) return;
+  const sheet = ensureParsedSheet(player);
+  const title = tokenQuickEl.querySelector('[data-tq-title]');
+  if (title) title.textContent = String(sheet?.name?.value || player.name || 'Персонаж');
+
+  const hpCur = tokenQuickEl.querySelector('input[data-tq-hp="cur"]');
+  const hpMax = tokenQuickEl.querySelector('input[data-tq-hp="max"]');
+  if (hpCur) hpCur.value = String(Math.max(0, Number(sheet?.vitality?.['hp-current']?.value) || 0));
+  if (hpMax) hpMax.value = String(Math.max(0, Number(sheet?.vitality?.['hp-max']?.value) || 0));
+
+  const ac = tokenQuickEl.querySelector('[data-tq-ac]');
+  if (ac) ac.textContent = String(Number(sheet?.vitality?.ac?.value) || 0);
+  const spd = tokenQuickEl.querySelector('[data-tq-speed]');
+  if (spd) spd.textContent = String(Number(sheet?.vitality?.speed?.value) || 0);
+  const lvl = tokenQuickEl.querySelector('[data-tq-level]');
+  if (lvl) lvl.textContent = String(Number(sheet?.info?.level?.value) || 1);
+
+  tokenQuickEl.querySelectorAll('[data-tq-stat]').forEach((el) => {
+    const k = el.getAttribute('data-tq-stat');
+    if (!k) return;
+    const st = sheet?.stats?.[k];
+    const score = Number(st?.score) || 0;
+    const mod = Number(st?.modifier);
+    const modText = Number.isFinite(mod) ? (mod >= 0 ? `+${mod}` : String(mod)) : '';
+    el.textContent = `${score}${modText ? ` (${modText})` : ''}`;
+  });
+
+  const canEdit = (String(myRole || '') === 'GM') || (String(player.ownerId || '') && String(player.ownerId) === String(myId || ''));
+  if (hpCur) hpCur.disabled = !canEdit;
+  if (hpMax) hpMax.disabled = !canEdit;
+}
+
+function showTokenQuickPopup(player, playerEl) {
+  if (!player || !playerEl) return;
+  const pop = ensureTokenQuickPopup();
+  tokenQuickPlayerId = player.id;
+  fillTokenQuickPopup(player);
+
+  const left = playerEl.offsetLeft + (playerEl.offsetWidth / 2);
+  const top = playerEl.offsetTop;
+  pop.classList.remove('hidden');
+  const w = pop.offsetWidth;
+  const h = pop.offsetHeight;
+
+  const padding = 6;
+  const boardWpx = boardWidth * 50;
+  const boardHpx = boardHeight * 50;
+
+  let x = Math.round(left - (w / 2));
+  let y = Math.round(top - h - 10);
+  if (y < padding) y = Math.round(top + playerEl.offsetHeight + 8);
+  x = Math.max(padding, Math.min(boardWpx - w - padding, x));
+  y = Math.max(padding, Math.min(boardHpx - h - padding, y));
+
+  pop.style.left = `${x}px`;
+  pop.style.top = `${y}px`;
+}
+
 // ================== PLAYER POSITION ==================
 function setPlayerPosition(player) {
   let el = playerElements.get(player.id);
@@ -1251,7 +1492,8 @@ function setPlayerPosition(player) {
   if (!el) {
     el = document.createElement('div');
     el.classList.add('player');
-    el.textContent = player.name?.[0] || '?';
+    // внутренний UI (буква + полоска HP)
+    ensureTokenUi(el);
     el.style.backgroundColor = player.color;
     el.style.position = 'absolute';
 
@@ -1266,15 +1508,25 @@ function setPlayerPosition(player) {
       }
     });
 
+    // dblclick => quick popup
+    el.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showTokenQuickPopup(player, el);
+    });
+
     board.appendChild(el);
     playerElements.set(player.id, el);
     player.element = el;
   }
 
-  el.textContent = player.name ? player.name[0] : '?';
+  ensureTokenUi(el);
+  const ch = el.querySelector('.token-char');
+  if (ch) ch.textContent = player.name ? player.name[0] : '?';
   el.style.backgroundColor = player.color;
   el.style.width = `${player.size * 50}px`;
   el.style.height = `${player.size * 50}px`;
+  updateTokenHpUi(player, el);
 
   if (player.x === null || player.y === null) {
     el.style.display = 'none';
@@ -1330,13 +1582,15 @@ addPlayerBtn.addEventListener('click', () => {
     name,
     color: playerColorInput.value,
     size: parseInt(playerSizeInput.value, 10),
-    isBase: !!isBaseCheckbox?.checked
+    isBase: !!isBaseCheckbox?.checked,
+    isAlly: !!isAllyCheckbox?.checked
   };
 
   sendMessage({ type: 'addPlayer', player });
 
   playerNameInput.value = '';
   if (isBaseCheckbox && !isBaseCheckbox.disabled) isBaseCheckbox.checked = false;
+  if (isAllyCheckbox && !isAllyCheckbox.disabled) isAllyCheckbox.checked = false;
 });
 
 // ================== MOVE PLAYER ==================
@@ -1374,6 +1628,7 @@ let diceAnimBusy = false;
 
 // ===== Other players dice feed (right of dice panel) =====
 let othersDiceWrap = null;
+let othersDiceList = null;
 
 function ensureOthersDiceUI() {
   if (othersDiceWrap) return othersDiceWrap;
@@ -1383,17 +1638,15 @@ function ensureOthersDiceUI() {
   if (existing) {
     othersDiceWrap = existing;
     if (!othersDiceWrap.querySelector('.dice-others__title')) {
-      othersDiceWrap.innerHTML = `
-        <div class="dice-others__title">Броски других</div>
-        <div class="dice-others__list" aria-hidden="true"></div>
-      `;
+      othersDiceWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
     }
-    // если HTML старый и нет списка — создаём
-    if (!othersDiceWrap.querySelector('.dice-others__list')) {
-      const list = document.createElement('div');
-      list.className = 'dice-others__list';
-      list.setAttribute('aria-hidden', 'true');
-      othersDiceWrap.appendChild(list);
+    // список (для направления снизу-вверх)
+    othersDiceList = document.getElementById('dice-others-list') || othersDiceWrap.querySelector('.dice-others__list');
+    if (!othersDiceList) {
+      othersDiceList = document.createElement('div');
+      othersDiceList.id = 'dice-others-list';
+      othersDiceList.className = 'dice-others__list';
+      othersDiceWrap.appendChild(othersDiceList);
     }
     return othersDiceWrap;
   }
@@ -1401,10 +1654,8 @@ function ensureOthersDiceUI() {
   // Fallback: старый вариант (если HTML не обновлён)
   othersDiceWrap = document.createElement("div");
   othersDiceWrap.className = "dice-others";
-  othersDiceWrap.innerHTML = `
-    <div class="dice-others__title">Броски других</div>
-    <div class="dice-others__list" aria-hidden="true"></div>
-  `;
+  othersDiceWrap.innerHTML = `<div class="dice-others__title">Броски других</div><div id="dice-others-list" class="dice-others__list"></div>`;
+  othersDiceList = othersDiceWrap.querySelector('#dice-others-list');
   document.body.appendChild(othersDiceWrap);
   return othersDiceWrap;
 }
@@ -1485,8 +1736,9 @@ function pushOtherDiceEvent(ev) {
   if (ev.crit === "crit-fail") item.classList.add("crit-fail");
   if (ev.crit === "crit-success") item.classList.add("crit-success");
 
-  const list = othersDiceWrap.querySelector('.dice-others__list') || othersDiceWrap;
-  list.appendChild(item);
+  // Лента растёт снизу вверх: контейнер items = column-reverse,
+  // поэтому добавляем элемент в НАЧАЛО (он окажется снизу).
+  (othersDiceList || othersDiceWrap).prepend(item);
 
   // через 5с — плавное исчезновение
   setTimeout(() => item.classList.add("fade"), 4200);
@@ -1663,11 +1915,9 @@ let diceOthersWrap = null;
 function ensureDiceOthersUI() {
   if (diceOthersWrap) return diceOthersWrap;
 
-  diceOthersWrap = document.createElement('div');
-  diceOthersWrap.className = 'dice-others';
-  diceOthersWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
-  document.body.appendChild(diceOthersWrap);
-
+  // Используем новый UI (inline-блок над панелью "Бросок")
+  ensureOthersDiceUI();
+  diceOthersWrap = (othersDiceList || othersDiceWrap);
   return diceOthersWrap;
 }
 
@@ -1700,7 +1950,8 @@ function pushOtherDice(ev) {
     <div class="dice-others__body">${escapeHtmlLocal(body)}</div>
   `;
 
-  diceOthersWrap.appendChild(item);
+  // См. комментарий выше: column-reverse => добавляем в начало, чтобы появлялось снизу
+  diceOthersWrap.prepend(item);
 
   // затухание и удаление
   setTimeout(() => item.classList.add('fade'), 4200);
@@ -3004,6 +3255,7 @@ async function sendMessage(msg) {
         else if (type === "addPlayer") {
           const player = msg.player || {};
           const isBase = !!player.isBase;
+          const isAlly = !!player.isAlly;
           const isMonster = !!player.isMonster;
           if (isBase) {
             const exists = (next.players || []).some(p => p.isBase && p.ownerId === myUserId);
@@ -3025,6 +3277,7 @@ async function sendMessage(msg) {
             pendingInitiativeChoice: (next.phase === "combat"),
             willJoinNextRound: false,
             isBase,
+            isAlly,
             isMonster,
             monsterId: player.monsterId || null,
             ownerId: myUserId,
