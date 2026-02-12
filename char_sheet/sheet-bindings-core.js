@@ -515,6 +515,7 @@ if (path === "proficiency" || path === "proficiencyCustom") {
   CS.bindings = CS.bindings || {};
   CS.bindings.openPopup = openPopup;
   CS.bindings.getUiState = getUiState;
+  CS.bindings.isModalBusy = isModalBusy;
   CS.bindings.markModalInteracted = markModalInteracted;
   CS.bindings.scheduleSheetSave = scheduleSheetSave;
   CS.bindings.bindEditableInputs = bindEditableInputs;
