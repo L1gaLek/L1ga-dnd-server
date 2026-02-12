@@ -2,6 +2,10 @@
 (function(){
   const CS = window.CharSheet = window.CharSheet || {};
 
+  // В монолитной версии `sheetContent` был в общей области видимости.
+  // После разбиения на модули получаем его напрямую из DOM.
+  const sheetContent = document.getElementById('sheet-content');
+
   function canEditPlayerProxy(player){
     try { return !!(CS.runtime && typeof CS.runtime.canEditPlayer === "function" && CS.runtime.canEditPlayer(player)); }
     catch { return false; }
@@ -489,5 +493,7 @@ function ensureWiredCloseHandlers() {
   CS.db.LANGUAGES_DB = LANGUAGES_DB;
   CS.db.openLanguagesPopup = openLanguagesPopup;
   CS.db.bindLanguagesUi = bindLanguagesUi;
+  // Используется из sheet-modal.js
+  CS.db.ensureWiredCloseHandlers = ensureWiredCloseHandlers;
 
 })();
