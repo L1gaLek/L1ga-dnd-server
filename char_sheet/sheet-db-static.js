@@ -76,12 +76,12 @@ function normalizeLanguagesLearned(raw) {
 }
 
   // Expose helpers for other modules (monolith/backward-compat)
-CS.utils = CS.utils || {};
-CS.utils.extractLanguagesHint = extractLanguagesHint;
-CS.utils.normalizeLanguagesLearned = normalizeLanguagesLearned;
-// Some modules still reference these as globals
-window.extractLanguagesHint = extractLanguagesHint;
-window.normalizeLanguagesLearned = normalizeLanguagesLearned;
+  CS.utils = CS.utils || {};
+  CS.utils.extractLanguagesHint = extractLanguagesHint;
+  CS.utils.normalizeLanguagesLearned = normalizeLanguagesLearned;
+  // Some modules still reference these as globals
+  window.extractLanguagesHint = extractLanguagesHint;
+  window.normalizeLanguagesLearned = normalizeLanguagesLearned;
 
 
 function openLanguagesPopup(player) {
