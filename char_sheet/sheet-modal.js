@@ -1247,4 +1247,3 @@ function bindCombatEditors(root, player, canEdit) {
 })();
 
 
-
