@@ -518,4 +518,9 @@ function bindLanguagesUi(root, player, canEdit) {
   // Also expose languages binder as global (backward-compat)
   window.bindLanguagesUi = bindLanguagesUi;
 
+
+  // Expose quick interaction wirers (backward-compat)
+  CS.db.wireQuickBasicInteractions = wireQuickBasicInteractions;
+  window.wireQuickBasicInteractions = wireQuickBasicInteractions;
+
 })();
