@@ -750,6 +750,14 @@ loginDiv.style.display = 'none';
         if (!existingIds.has(id)) {
           el.remove();
           playerElements.delete(id);
+
+          const hb = hpBarElements.get(id);
+          if (hb) hb.remove();
+          hpBarElements.delete(id);
+
+          if (tokenQuickPopupForId && String(tokenQuickPopupForId) === String(id)) {
+            closeTokenQuickPopup();
+          }
         }
       });
 
@@ -1292,6 +1300,14 @@ function setPlayerPosition(player) {
       openTokenQuickPopup(player.id);
     });
 
+    // Safari/dragging sometimes eats dblclick — fallback
+    el.addEventListener('click', (ev) => {
+      if (ev.detail === 2) {
+        ev.stopPropagation();
+        openTokenQuickPopup(player.id);
+      }
+    });
+
     board.appendChild(el);
     playerElements.set(player.id, el);
     player.element = el;
@@ -1365,8 +1381,8 @@ function updateHpBarForPlayer(player, tokenEl) {
     <div class="hp-bar__track">
       <div class="hp-bar__fill" style="width:${percent}%"></div>
       ${safeTemp > 0 ? `<div class="hp-bar__temp" style="width:${tempPercent}%"></div>` : ``}
+      <div class="hp-bar__label">${safeCur}/${safeMax}${safeTemp > 0 ? `+${safeTemp}` : ``}</div>
     </div>
-    <div class="hp-bar__text">${safeCur}/${safeMax}${safeTemp > 0 ? `+${safeTemp}` : ``}</div>
   `;
 }
 
