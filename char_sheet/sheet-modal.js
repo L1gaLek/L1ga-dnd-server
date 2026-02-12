@@ -18,6 +18,17 @@
   const sheetActions = document.getElementById('sheet-actions');
   const sheetContent = document.getElementById('sheet-content');
 
+  // Expose DOM refs for other char_sheet modules (bindings/db/tabs)
+  CS.dom = CS.dom || {};
+  Object.assign(CS.dom, {
+    sheetModal,
+    sheetClose,
+    sheetTitle,
+    sheetSubtitle,
+    sheetActions,
+    sheetContent,
+  });
+
   // context from client.js
   let ctx = null;
 
@@ -215,8 +226,8 @@
   function closeModal() {
     if (!sheetModal) return;
     hideHpPopup();
-    hideExhPopup();
-    hideCondPopup();
+    CS.db?.hideExhPopup?.();
+    CS.db?.hideCondPopup?.();
     sheetModal.classList.add('hidden');
     sheetModal.setAttribute('aria-hidden', 'true');
     openedSheetPlayerId = null;
@@ -405,6 +416,15 @@
     const first = el.querySelector('[data-hp-field="cur"]');
     first?.focus?.();
   }
+
+  // Expose some modal actions for other modules (close handlers / db popups wiring)
+  CS.modal = CS.modal || {};
+  Object.assign(CS.modal, {
+    openModal,
+    closeModal,
+    showHpPopup,
+    hideHpPopup,
+  });
 
   function hideHpPopup() {
     hpPopupEl?.classList.add('hidden');
