@@ -1,0 +1,298 @@
+/* Auto-split from style.css — do not edit here if you still maintain the monolith. */
+/* Section: players */
+
+/* Журнал, управление, список инициативы */
+#action-log, #player-management, #player-list-container {
+  background-color: #1e1e1e;
+  border: 1px solid #555;
+  padding: 10px;
+  color: #ddd;
+  border-radius: 5px;
+  overflow-y: auto;
+}
+
+#player-management {
+  width: var(--pm-w);
+  max-height: 260px;
+  overflow-x: hidden;
+}
+
+#player-list-container {
+  width: var(--pl-w);
+  max-height: 360px;
+  overflow-x: hidden;
+}
+
+/* Справа под журналом: список + очередь друг под другом */
+#player-side-stack{
+  display: flex;
+  flex-direction: column;
+  gap: var(--left-gap);
+  width: var(--pl-w);
+}
+
+/* ===== Управление игроками — компактная сетка без переносов кнопки ===== */
+#player-management #player-controls{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#player-management #player-controls input[type="text"]{
+  width: 100%;
+}
+
+#player-management #player-color{
+  padding: 0;
+  width: 36px;
+  height: 28px;
+}
+
+#player-management #player-size{
+  width: 88px;
+}
+
+#player-management #add-player{
+  white-space: nowrap;
+  padding: 6px 10px;
+  height: 100%;              /* по высоте = две галочки */
+  min-width: 104px;
+  max-width: 120px;
+  width: 120px;
+}
+
+#action-log h3,
+#player-management h3,
+#player-list-container h3 {
+  margin-top: 0;
+  color: #fff;
+  font-size: 13px;
+}
+
+#action-log ul, #player-list {
+  list-style: none;
+  padding-left: 10px;
+  margin: 0;
+}
+
+#action-log li, #player-list li {
+  margin-bottom: 4px;
+  font-weight: bold;
+}
+
+/* Настройки поля и игрока */
+#board-settings, #controls, #player-controls, #environment-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.player {
+  z-index: 2;
+}
+
+/* Игроки */
+.player {
+  position: absolute;
+  border-radius: 50%;
+  color: white;
+  font-weight: bold;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: grab;
+  border: 2px solid #888;
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+.player.selected {
+  outline: 3px solid yellow;
+  cursor: grabbing;
+}
+
+/* Подсветка игрока, который сейчас ходит */
+.player.current-turn {
+  outline: 4px solid orange;
+  box-shadow: 0 0 12px rgba(255, 165, 0, 0.8);
+}
+
+/* Если персонаж одновременно "ходит" и "выбран", приоритет у выбора (жёлтый) */
+.player.selected.current-turn {
+  outline: 4px solid yellow;
+  box-shadow: 0 0 12px rgba(255, 255, 0, 0.75);
+}
+
+/* Призванные/временные до "К бою" — лёгкая пунктирная рамка */
+.player.pending-combat {
+  outline: 2px dashed rgba(255,255,255,0.7);
+  outline-offset: 2px;
+}
+
+#player-management h3 {
+  margin-top: 0;
+  color: #fff;
+}
+
+.player-type {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Строка игрока в списке */
+.player-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 6px;
+}
+
+/* Имя занимает всё свободное место и НЕ сжимается до нуля */
+.player-name-text {
+  flex: 1 1 100%;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Кнопки не должны сжиматься */
+.player-list-item button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 3px 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  border-radius: 3px;
+}
+
+/* левая часть: индикатор + имя + бейдж "основа" */
+.player-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* уменьшаем текст и "высоту" строки */
+.player-name-text {
+  font-size: 12px;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden; /* убираем ползунок */
+  text-overflow: ellipsis;
+}
+
+/* Рамка одного игрока в списке инициативы */
+.player-list-item {
+  width: 100%;
+  max-width: 100%;
+
+  border: 1px solid #444;
+  border-radius: 4px;
+  /* чуть шире внутренние отступы — кнопки визуально не упираются в границы */
+  padding: 6px 8px;
+  margin-bottom: 6px;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+
+  background-color: #1a1a1a;
+}
+
+.player-list-item:hover {
+  border-color: #777;
+  background-color: #222;
+}
+
+/* справа: селект + кнопки */
+.player-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  flex-shrink: 0;
+  /* чтобы рамка карточки чуть выступала относительно кнопок */
+  padding: 0 3px;
+}
+
+.player-actions-top{
+  display: flex;
+  gap: 6px;
+  justify-content: stretch;
+}
+
+.player-actions-top .sheet-btn{
+  width: 100%;
+}
+
+.player-actions-row{
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.player-actions-row--controls{
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.player-actions-spacer{
+  flex: 1 1 auto;
+}
+
+/* компактные кнопки в карточке игрока */
+.mini-action-btn{
+  font-size: 12px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.mini-action-btn--secondary{ background: rgba(255,255,255,0.08); }
+
+.mini-action-btn--danger{ background: rgba(255,0,0,0.18); border-color: rgba(255,0,0,0.35); }
+
+.player-actions-row--bottom{
+  margin-top: 2px;
+}
+
+.player-actions-bottom{
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.player-color-input{
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #555;
+  border-radius: 6px;
+  background: transparent;
+}
+
+/* кнопки в списке игроков компактнее */
+.player-actions button {
+  padding: 2px 6px;
+  font-size: 12px;
+  line-height: 14px;
+}
+
+/* явный класс для кнопок выбора инициативы (на всякий случай) */
+.mini-action-btn{
+  padding: 2px 6px;
+  font-size: 12px;
+  line-height: 14px;
+}
+
+/* ===== Current turn highlight in "Пользователи и персонажи" ===== */
+.player-list-item.is-current-turn{
+  outline: 2px solid rgba(255,165,0,0.9);
+  box-shadow: 0 0 0 2px rgba(255,165,0,0.18);
+}
