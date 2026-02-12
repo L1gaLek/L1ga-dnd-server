@@ -373,4 +373,9 @@
   CSX.tabs.renderNotesTab = renderNotesTab;
   window.renderNotesTab = renderNotesTab;
 
+
+  // Also expose commonly-used tab binders as globals (backward-compat)
+  window.bindInventoryEditors = bindInventoryEditors;
+  window.bindNotesEditors = bindNotesEditors;
+
 })();
