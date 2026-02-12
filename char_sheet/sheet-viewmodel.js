@@ -433,7 +433,28 @@
     // “прочие владения и заклинания” (редактируемый текст)
     const profDoc = sheet?.text?.prof?.value?.data;
     const profPlain = (sheet?.text?.profPlain?.value ?? sheet?.text?.profPlain ?? "");
-    let profLines = tiptapToPlainLines(profDoc);
+    // tiptap doc -> plain lines (function lives in bindings-core after split)
+    const tiptapToPlainLinesFn = (CS.bindings && typeof CS.bindings.tiptapToPlainLines === "function")
+      ? CS.bindings.tiptapToPlainLines
+      : function fallbackTiptapToPlainLines(doc) {
+          try {
+            const out = [];
+            const walk = (node) => {
+              if (!node) return;
+              if (Array.isArray(node)) return node.forEach(walk);
+              if (node.type === "text" && typeof node.text === "string") out.push(node.text);
+              if (Array.isArray(node.content)) walk(node.content);
+            };
+            walk(doc);
+            return out.join(" ")
+              .split(/\r?\n/)
+              .map(s => s.trim())
+              .filter(Boolean);
+          } catch {
+            return [];
+          }
+        };
+    let profLines = tiptapToPlainLinesFn(profDoc);
     // если нет tiptap-данных — используем редактируемый plain-text
     if ((!profLines || !profLines.length) && typeof profPlain === "string") {
       profLines = profPlain.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
