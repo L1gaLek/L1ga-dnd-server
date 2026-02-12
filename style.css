@@ -14,8 +14,8 @@ body {
 :root{
   /* единая геометрия левой колонки */
   --left-gap: 16px;
-  --pm-w: 280px;   /* "Управление игроками" */
-  --pl-w: 260px;   /* "Пользователи и персонажи" + "Очередность хода" */
+  --pm-w: 240px;   /* "Управление игроками" */
+  --pl-w: 330px;   /* "Пользователи и персонажи" + "Очередность хода" */
   --dice-w: var(--pm-w);
 }
 
@@ -93,8 +93,8 @@ body {
 }
 
 /* строка: цвет + размер */
-.pm-row{ display:flex; align-items:center; gap: 6px; }
-.pm-row--size{ justify-content: flex-start; }
+.pm-row{ display:flex; align-items:center; gap: 10px; }
+.pm-row--size{ justify-content: space-between; }
 
 #player-management #player-color{
   padding: 0;
@@ -116,21 +116,32 @@ body {
 }
 
 /* строка: "Основа" + "Добавить" */
-.pm-row--bottom{ justify-content: space-between; align-items: flex-start; }
+.pm-row--bottom{ justify-content: space-between; }
 
 .pm-types{
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: 132px;
+}
+
+.pm-row--bottom{ align-items: stretch; }
+
+#player-management #add-player{
+  white-space: nowrap;
+  padding: 6px 10px;
 }
 
 #player-management #add-player{
-  width: 132px;
+  width: 96px;
+  max-width: 100%;
   white-space: nowrap;
-  padding: 7px 10px;
 }
 
+#player-management #add-player{
+  /* высота = две строки чекбоксов */
+  height: 52px;
+  padding: 6px 8px;
+}
 
 #action-log h3,
 #player-management h3,
@@ -323,6 +334,116 @@ outline-color: #666;
   border: 2px solid #888;
   box-sizing: border-box;
   z-index: 2;
+}
+
+/* ===== Полоска HP над токеном (всегда поверх) ===== */
+.hpbar{
+  position: absolute;
+  z-index: 9999;
+  pointer-events: none;
+}
+.hpbar__track{
+  position: relative;
+  width: 100%;
+  height: 14px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.18);
+  overflow: hidden;
+}
+.hpbar__fill{
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: rgba(0, 200, 120, 0.85);
+}
+.hpbar__text{
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.9);
+}
+
+/* ===== Мини-окошко по двойному клику ===== */
+.token-popup{
+  z-index: 10000;
+  pointer-events: auto;
+  width: 200px;
+}
+.token-popup__panel{
+  background: rgba(18,18,18,0.95);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+.token-popup__title{
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.token-popup__grid{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tp-row{
+  display: grid;
+  grid-template-columns: 32px 1fr auto 1fr;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.tp-row .tp-sep{ opacity: .7; text-align: center; }
+.tp-input{
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+}
+.tp-val{
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: #fff;
+  text-align: center;
+}
+.tp-stats{
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.tp-stat{
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  font-size: 11px;
+}
+.token-popup__actions{
+  margin-top: 8px;
+}
+.tp-btn{
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
 }
 
 .player.selected {
@@ -721,7 +842,7 @@ outline-color: #666;
 
   border: 1px solid #444;
   border-radius: 4px;
-  padding: 6px 2px 6px 6px; /* справа почти впритык к кнопкам */
+  padding: 8px 10px;
   margin-bottom: 6px;
 
   display: flex;
@@ -2528,7 +2649,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .dice-viz{
   position: relative;
   width: var(--dice-w);
-  padding: 6px;
+  padding: 8px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(20,20,20,0.92);
@@ -2547,7 +2668,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   flex-wrap: wrap;            /* разрешаем перенос строки */
   gap: 8px;
   align-items: flex-start;     /* чтобы “Инициатива” не тянула высоту */
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 /* Инициатива — отдельной строкой, влезает в рамку */
@@ -2668,8 +2789,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
 }
 
 #dice-canvas{
-  width: 100%;
-  height: 96px;
+  width: 224px;
+  height: 110px;
   display: block;
   margin: 0 auto;
   border-radius: 12px;
@@ -2790,8 +2911,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
 }
 
 #dice-canvas{
-  width: 100%;
-  height: 96px;
+  width: 250px;
+  height: 170px;
   display: block;
   margin: 4px auto 0;
   border-radius: 12px;
@@ -4230,176 +4351,3 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .cmp-map-actions select{ background:rgba(0,0,0,.35); }
 .cmp-move{ display:flex; gap:8px; align-items:center; }
 .cmp-empty{ opacity:.75; padding:8px 0; }
-
-/* ================== TOKEN HP BAR (always on top) ================== */
-.hp-bar{
-  position:absolute;
-  height:14px;
-  transform: translateY(-2px);
-  display:flex;
-  align-items:center;
-  z-index:10000;
-  pointer-events:none;
-}
-.hp-bar__track{
-  position:relative;
-  flex:1 1 auto;
-  height:12px;
-  border-radius:999px;
-  background: rgba(0,0,0,0.55);
-  border:1px solid rgba(255,255,255,0.22);
-  overflow:hidden;
-}
-.hp-bar__fill{
-  position:absolute;
-  left:0; top:0; bottom:0;
-  background: rgba(0,200,0,0.85);
-}
-.hp-bar__temp{
-  position:absolute;
-  left:0; top:0; bottom:0;
-  background: rgba(0,180,255,0.55);
-  mix-blend-mode: screen;
-}
-.hp-bar__label{
-  position:absolute;
-  left:50%;
-  top:50%;
-  transform: translate(-50%,-50%);
-  font-size:10px;
-  line-height:1;
-  padding:1px 6px;
-  border-radius:999px;
-  background: rgba(0,0,0,0.55);
-  border:1px solid rgba(255,255,255,0.16);
-  color:#fff;
-  white-space:nowrap;
-}
-
-/* ================== TOKEN QUICK POPUP (dblclick) ================== */
-.token-quick-popup{
-  width:240px;
-  max-width:240px;
-  background: rgba(20,20,20,0.92);
-  border: 1px solid rgba(255,255,255,0.18);
-  border-radius:12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-  padding:10px;
-  color:#fff;
-  backdrop-filter: blur(6px);
-}
-.token-quick-popup .tqp-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:8px;
-  margin-bottom:8px;
-}
-.token-quick-popup .tqp-title{
-  font-size:13px;
-  font-weight:700;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-.token-quick-popup .tqp-x{
-  appearance:none;
-  border:none;
-  background: rgba(255,255,255,0.08);
-  color:#fff;
-  border-radius:10px;
-  width:26px;
-  height:26px;
-  cursor:pointer;
-}
-.token-quick-popup .tqp-row{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  margin-bottom:8px;
-}
-.token-quick-popup .tqp-label{
-  font-size:11px;
-  opacity:0.85;
-  width:28px;
-}
-.token-quick-popup .tqp-inp{
-  width:56px;
-  height:26px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.06);
-  color:#fff;
-  padding:0 8px;
-  font-size:12px;
-}
-.token-quick-popup .tqp-inp--temp{ width:52px; }
-.token-quick-popup .tqp-slash,
-.token-quick-popup .tqp-temp{
-  font-size:12px;
-  opacity:0.85;
-}
-.token-quick-popup .tqp-grid3{
-  display:grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap:6px;
-  margin-bottom:8px;
-}
-.token-quick-popup .tqp-kv{
-  border:1px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.04);
-  border-radius:12px;
-  padding:6px 8px;
-  text-align:center;
-}
-.token-quick-popup .tqp-k{
-  font-size:10px;
-  opacity:0.78;
-}
-.token-quick-popup .tqp-v{
-  font-size:13px;
-  font-weight:700;
-  margin-top:2px;
-}
-.token-quick-popup .tqp-stats{
-  display:grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap:6px;
-  margin-bottom:10px;
-}
-.token-quick-popup .tqp-stat{
-  border:1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.03);
-  border-radius:12px;
-  padding:6px 8px;
-  display:flex;
-  justify-content:space-between;
-  align-items:baseline;
-}
-.token-quick-popup .tqp-stat-k{
-  font-size:10px;
-  opacity:0.78;
-}
-.token-quick-popup .tqp-stat-v{
-  font-size:12px;
-  font-weight:700;
-}
-.token-quick-popup .tqp-stat-m{
-  font-size:11px;
-  opacity:0.85;
-  margin-left:4px;
-  font-weight:600;
-}
-.token-quick-popup .tqp-sheet-btn{
-  width:100%;
-  height:32px;
-  border-radius:12px;
-  border:1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.08);
-  color:#fff;
-  cursor:pointer;
-}
-.token-quick-popup .tqp-sheet-btn:hover,
-.token-quick-popup .tqp-x:hover{
-  background: rgba(255,255,255,0.12);
-}
