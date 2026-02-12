@@ -470,7 +470,7 @@ function parseSpellClassesFromHtml(html) {
         const href = a.getAttribute("href") || "";
         try {
           const u = new URL(href, "https://dnd.su");
-          const val = u.searchParams.CS.utils.get("class");
+          const val = u.searchParams.get("class");
           const label = (a.textContent || "").trim();
           if (!val || !label) return;
           if (seen.has(val)) return;
@@ -570,7 +570,7 @@ function parseSpellsFromClassHtml(html) {
 }
 
 async function ensureDbSpellDesc(href) {
-  if (spellDbCache.descByHref.has(href)) return spellDbCache.descByHref.CS.utils.get(href);
+  if (spellDbCache.descByHref.has(href)) return spellDbCache.descByHref.get(href);
   const html = await fetchSpellHtml(href);
   const parsed = extractSpellFromHtml(html);
   spellDbCache.descByHref.set(href, parsed);
@@ -804,14 +804,14 @@ async function openSpellDbPopup({ root, player, sheet, canEdit }) {
     for (const s of filtered) {
       const k = String(s.level ?? "?");
       if (!groups.has(k)) groups.set(k, []);
-      groups.CS.utils.get(k).push(s);
+      groups.get(k).push(s);
     }
     const order = ["0","1","2","3","4","5","6","7","8","9","?"];
     const htmlGroups = order
-      .filter(k => groups.has(k) && groups.CS.utils.get(k).length)
+      .filter(k => groups.has(k) && groups.get(k).length)
       .map(k => {
         const title = (k === "0") ? "Заговоры (0)" : (k === "?" ? "Уровень не определён" : `Уровень ${k}`);
-        const rows = groups.CS.utils.get(k)
+        const rows = groups.get(k)
           .sort((a,b)=>spellNameForUI(a).localeCompare(spellNameForUI(b), "ru"))
           .map(s => {
             const safeId = CS.utils.escapeHtml(String(s.id || ""));
@@ -853,7 +853,7 @@ async function openSpellDbPopup({ root, player, sheet, canEdit }) {
         const row = btn.closest("[data-db-id]");
         if (!row) return;
         const id = row.getAttribute("data-db-id") || "";
-        const s = cache.byId.CS.utils.get(id);
+        const s = cache.byId.get(id);
         if (!s) return;
 
         // decide level to save in sheet
