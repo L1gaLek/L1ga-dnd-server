@@ -671,6 +671,14 @@ const weapons = weaponsRaw
   CS.utils.formatMod = formatMod;
   CS.utils.safeInt = safeInt;
   CS.utils.numLike = numLike;
+
+  // Expose path helpers for other modules (backward-compat)
+  CS.utils.getByPath = getByPath;
+  CS.utils.setByPath = setByPath;
+  // Some modules still reference these as globals
+  window.getByPath = getByPath;
+  window.setByPath = setByPath;
+
   CS.utils.scoreToModifier = scoreToModifier;
   CS.utils.abilityModFromScore = abilityModFromScore;
   CS.utils.parseModInput = parseModInput;
