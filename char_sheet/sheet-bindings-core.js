@@ -187,17 +187,17 @@ function bindEditableInputs(root, player, canEdit) {
 
       // если в json есть tiptap-профи, а plain пустой — заполняем plain один раз, чтобы было что редактировать
       if (path === "text.profPlain.value") {
-        const curPlain = CS.utils.getByPath(player.sheet.parsed, "text.profPlain.value");
+        const curPlain = getByPath(player.sheet.parsed, "text.profPlain.value");
         if (!curPlain) {
           const profDoc = player.sheet.parsed?.text?.prof?.value?.data;
           const lines = tiptapToPlainLines(profDoc);
           if (lines && lines.length) {
-            CS.utils.setByPath(player.sheet.parsed, "text.profPlain.value", lines.join("\n"));
+            setByPath(player.sheet.parsed, "text.profPlain.value", lines.join("\n"));
           }
         }
       }
 
-      const raw = CS.utils.getByPath(player.sheet.parsed, path);
+      const raw = getByPath(player.sheet.parsed, path);
       if (inp.type === "checkbox") inp.checked = !!raw;
       else inp.value = (raw ?? "");
 
@@ -212,13 +212,13 @@ function bindEditableInputs(root, player, canEdit) {
         else if (inp.type === "number") val = inp.value === "" ? "" : Number(inp.value);
         else val = inp.value;
 
-        CS.utils.setByPath(player.sheet.parsed, path, val);
+        setByPath(player.sheet.parsed, path, val);
 
 
         // Истощение (0..6) и Состояние (строка) не связаны
         if (path === "exhaustion") {
-          const ex = Math.max(0, Math.min(6, CS.utils.safeInt(CS.utils.getByPath(player.sheet.parsed, "exhaustion"), 0)));
-          CS.utils.setByPath(player.sheet.parsed, "exhaustion", ex);
+          const ex = Math.max(0, Math.min(6, CS.utils.safeInt(getByPath(player.sheet.parsed, "exhaustion"), 0)));
+          setByPath(player.sheet.parsed, "exhaustion", ex);
         }
 
         if (path === "name.value") player.name = val || player.name;
@@ -242,7 +242,7 @@ if (path === "proficiency" || path === "proficiencyCustom") {
   // обновить подсказку у кружков спасбросков
   root.querySelectorAll('.lss-save-dot[data-save-key]').forEach(d => {
     const statKey = d.getAttribute('data-save-key');
-    if (statKey) d.title = `Владение спасброском: +${CS.utils.getProfBonus(player.sheet.parsed)} к спасброску`;
+    if (statKey) d.title = `Владение спасброском: +${getProfBonus(player.sheet.parsed)} к спасброску`;
   });
 
   updateWeaponsBonuses(root, player.sheet.parsed);
@@ -334,7 +334,7 @@ if (path === "proficiency" || path === "proficiencyCustom") {
 
       dot.classList.add('clickable');
       dot.classList.toggle('active', !!sheet?.saves?.[statKey]?.isProf);
-      dot.title = `Владение спасброском: +${CS.utils.getProfBonus(sheet)} к спасброску`;
+      dot.title = `Владение спасброском: +${getProfBonus(sheet)} к спасброску`;
 
       if (!canEdit) return;
 
@@ -349,7 +349,7 @@ if (path === "proficiency" || path === "proficiencyCustom") {
 
         sheet.saves[statKey].isProf = !sheet.saves[statKey].isProf;
         dot.classList.toggle('active', !!sheet.saves[statKey].isProf);
-        dot.title = `Владение спасброском: +${CS.utils.getProfBonus(sheet)} к спасброску`;
+        dot.title = `Владение спасброском: +${getProfBonus(sheet)} к спасброску`;
 
         // обновить значение спасброска в UI
         const ability = dot.closest('.lss-ability');
@@ -455,7 +455,7 @@ if (path === "proficiency" || path === "proficiencyCustom") {
 
       const handler = () => {
         const desired = CS.utils.parseModInput(inp.value, 0);
-        const prof = CS.utils.getProfBonus(sheet);
+        const prof = getProfBonus(sheet);
         const statMod = CS.utils.safeInt(sheet?.stats?.[statKey]?.modifier, 0);
 
         if (kind === "save") {
@@ -502,7 +502,7 @@ if (path === "proficiency" || path === "proficiencyCustom") {
 
         const baseStat = sheet.skills[skillKey].baseStat;
         const statMod = CS.utils.safeInt(sheet?.stats?.[baseStat]?.modifier, 0);
-        const prof = CS.utils.getProfBonus(sheet);
+        const prof = getProfBonus(sheet);
         const boostLevel = getSkillBoostLevel(sheet, skillKey);
         const boostAdd = boostLevelToAdd(boostLevel, prof);
 
@@ -533,38 +533,4 @@ if (path === "proficiency" || path === "proficiencyCustom") {
   CS.bindings.scheduleSheetSave = scheduleSheetSave;
   CS.bindings.bindEditableInputs = bindEditableInputs;
 
-
-
-  // Expose binding helpers for other modules (backward-compat)
-  CS.bindings = CS.bindings || {};
-  CS.bindings.captureUiStateFromDom = captureUiStateFromDom;
-  CS.bindings.restoreUiStateToDom = restoreUiStateToDom;
-  CS.bindings.isModalBusy = isModalBusy;
-  CS.bindings.markModalInteracted = markModalInteracted;
-
-  CS.bindings.bindEditableInputs = bindEditableInputs;
-  CS.bindings.bindAbilityAndSkillEditors = bindAbilityAndSkillEditors;
-  CS.bindings.bindSaveProfDots = bindSaveProfDots;
-  CS.bindings.bindSkillBoostDots = bindSkillBoostDots;
-  CS.bindings.bindStatRollButtons = bindStatRollButtons;
-
-  // Some modules still reference these as globals
-  window.captureUiStateFromDom = captureUiStateFromDom;
-  window.restoreUiStateToDom = restoreUiStateToDom;
-  window.isModalBusy = isModalBusy;
-  window.markModalInteracted = markModalInteracted;
-
-  window.bindEditableInputs = bindEditableInputs;
-  window.bindAbilityAndSkillEditors = bindAbilityAndSkillEditors;
-  window.bindSaveProfDots = bindSaveProfDots;
-  window.bindSkillBoostDots = bindSkillBoostDots;
-  window.bindStatRollButtons = bindStatRollButtons;
-
-  // Expose coin conversion map used by inventory tab (backward-compat)
-  window.COIN_TO_CP = COIN_TO_CP;
-
-
-
-  // Expose constants
-  CS.bindings.COIN_TO_CP = COIN_TO_CP;
 })();
