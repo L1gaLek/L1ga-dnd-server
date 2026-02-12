@@ -35,22 +35,25 @@
   CS.dom.sheetActions = sheetActions;
   CS.dom.sheetContent = sheetContent;
 
-  // context from client.js
-  let ctx = null;
-
-  function canEditPlayer(player) {
-
-
   // Convert viewmodel numeric-like values to safe strings for <input type="number">.
   // ViewModel uses "-" as a fallback; number inputs cannot parse "-".
   function safeNumAttr(v) {
     if (v === null || v === undefined) return "";
     const s = String(v).trim();
     if (!s || s === "-") return "";
-    // allow integers/decimals with optional leading minus (just in case), but reject lone "-"
+    // allow integers/decimals with optional leading sign, but reject lone "-"
     if (!/^[-+]?\d+(?:\.\d+)?$/.test(s)) return "";
     return CS.utils.escapeHtml(s);
   }
+
+
+
+  // context from client.js
+  let ctx = null;
+
+  function canEditPlayer(player) {
+
+
 
 
     // client.js передаёт в init() функции getMyRole()/getMyId().
