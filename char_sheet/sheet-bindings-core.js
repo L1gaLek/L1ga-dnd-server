@@ -131,6 +131,9 @@
     return lines;
   }
 
+  // export for other modules (viewmodel)
+  CS.bindings.tiptapToPlainLines = tiptapToPlainLines;
+
   function scheduleSheetSave(player) {
     if (!player?.id || !ctx?.sendMessage) return;
 
