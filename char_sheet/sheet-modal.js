@@ -26,6 +26,7 @@
 
   // publish DOM refs for other modules
   CS.dom.sheetModal = sheetModal;
+  window.sheetModal = sheetModal;
   CS.dom.sheetClose = sheetClose;
   CS.dom.sheetTitle = sheetTitle;
   CS.dom.sheetSubtitle = sheetSubtitle;
