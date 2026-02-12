@@ -26,6 +26,8 @@
 
   // publish DOM refs for other modules
   CS.dom.sheetModal = sheetModal;
+  // Backward-compat: some older modules referenced a global `sheetModal` DOM element.
+  // Expose it on window to avoid `ReferenceError: sheetModal is not defined`.
   window.sheetModal = sheetModal;
   CS.dom.sheetClose = sheetClose;
   CS.dom.sheetTitle = sheetTitle;
@@ -848,12 +850,54 @@ function bindCombatEditors(root, player, canEdit) {
   }
 
   function renderActiveTab(tabId, vm, canEdit) {
-    if (tabId === "basic") return renderBasicTab(vm, canEdit);
-    if (tabId === "spells") return CS.spells.renderSpellsTab(vm);
-    if (tabId === "combat") return renderCombatTab(vm);
-    if (tabId === "inventory") return CS.tabs.renderInventoryTab(vm);
-    if (tabId === "personality") return renderPersonalityTab(vm);
-    if (tabId === "notes") return CS.tabs.renderNotesTab(vm);
+    // After splitting the old monolith into multiple files, some tab renderers may live
+    // inside their own modules/IIFEs. Prefer CharSheet exports; fall back to window globals.
+    const tabs = (CS && CS.tabs) ? CS.tabs : {};
+    const spells = (CS && CS.spells) ? CS.spells : {};
+
+    const pick = (name) => (tabs && typeof tabs[name] === "function")
+      ? tabs[name]
+      : (typeof window[name] === "function" ? window[name] : null);
+
+    if (tabId === "basic") {
+      const fn = pick("renderBasicTab");
+      if (fn) return fn(vm, canEdit);
+      return `<div class="sheet-note">Ошибка: не загружена вкладка «Основа» (renderBasicTab).</div>`;
+    }
+
+    if (tabId === "spells") {
+      const fn = (spells && typeof spells.renderSpellsTab === "function") ? spells.renderSpellsTab
+        : pick("renderSpellsTab");
+      if (fn) return fn(vm, canEdit);
+      return `<div class="sheet-note">Ошибка: не загружена вкладка «Заклинания».</div>`;
+    }
+
+    if (tabId === "combat") {
+      const fn = pick("renderCombatTab");
+      if (fn) return fn(vm, canEdit);
+      return `<div class="sheet-note">Ошибка: не загружена вкладка «Бой» (renderCombatTab).</div>`;
+    }
+
+    if (tabId === "inventory") {
+      const fn = (tabs && typeof tabs.renderInventoryTab === "function") ? tabs.renderInventoryTab
+        : pick("renderInventoryTab");
+      if (fn) return fn(vm, canEdit);
+      return `<div class="sheet-note">Ошибка: не загружена вкладка «Инвентарь».</div>`;
+    }
+
+    if (tabId === "personality") {
+      const fn = pick("renderPersonalityTab");
+      if (fn) return fn(vm, canEdit);
+      return `<div class="sheet-note">Ошибка: не загружена вкладка «Личность».</div>`;
+    }
+
+    if (tabId === "notes") {
+      const fn = (tabs && typeof tabs.renderNotesTab === "function") ? tabs.renderNotesTab
+        : pick("renderNotesTab");
+      if (fn) return fn(vm, canEdit);
+      return `<div class="sheet-note">Ошибка: не загружена вкладка «Заметки».</div>`;
+    }
+
     return `<div class="sheet-note">Раздел в разработке</div>`;
   }
 
