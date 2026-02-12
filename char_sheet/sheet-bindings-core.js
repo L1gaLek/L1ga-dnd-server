@@ -560,4 +560,8 @@ if (path === "proficiency" || path === "proficiencyCustom") {
   window.bindSkillBoostDots = bindSkillBoostDots;
   window.bindStatRollButtons = bindStatRollButtons;
 
+  // Expose coin conversion map used by inventory tab (backward-compat)
+  window.COIN_TO_CP = COIN_TO_CP;
+
+
 })();
