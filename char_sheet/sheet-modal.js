@@ -884,7 +884,8 @@ function bindCombatEditors(root, player, canEdit) {
     sheetTitle.textContent = `Инфа: ${player.name}`;
     sheetSubtitle.textContent = `Владелец: ${player.ownerName || 'Unknown'} • Тип: ${player.isBase ? 'Основа' : '-'}`;
 
-    ensurePlayerSheetWrapper(player);
+    // ensure wrapper exists (moved to viewmodel module after splitting)
+    CS.viewmodel.ensurePlayerSheetWrapper(player);
 
     sheetActions.innerHTML = '';
     const note = document.createElement('div');
