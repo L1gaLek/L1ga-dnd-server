@@ -1,0 +1,861 @@
+// ================== BOARD ==================
+function renderBoard(state) {
+  board.querySelectorAll('.cell').forEach(c => c.remove());
+  board.style.position = 'relative';
+  board.style.width = `${boardWidth * 50}px`;
+  board.style.height = `${boardHeight * 50}px`;
+  board.style.display = 'grid';
+  board.style.gridTemplateColumns = `repeat(${boardWidth}, 50px)`;
+  board.style.gridTemplateRows = `repeat(${boardHeight}, 50px)`;
+
+  // Подложка должна растягиваться на весь размер поля (а не на 1 клетку)
+  applyBoardBackgroundToDom(state);
+  applyOpacityToDom(state);
+
+  for (let y = 0; y < boardHeight; y++) {
+    for (let x = 0; x < boardWidth; x++) {
+      const cell = document.createElement('div');
+      cell.classList.add('cell');
+      cell.dataset.x = x;
+      cell.dataset.y = y;
+      if (state.walls?.find(w => w.x === x && w.y === y)) cell.classList.add('wall');
+      board.appendChild(cell);
+    }
+  }
+
+  players.forEach(p => setPlayerPosition(p));
+}
+
+// ================== SHEET HELPERS (for HP bar + mini popup) ==================
+function getFrom(obj, path, fallback) {
+  try {
+    const parts = String(path || '').split('.').filter(Boolean);
+    let cur = obj;
+    for (const k of parts) {
+      if (!cur || typeof cur !== 'object') return fallback;
+      cur = cur[k];
+    }
+    return (cur === undefined ? fallback : cur);
+  } catch {
+    return fallback;
+  }
+}
+
+function safeNum(v, fallback = null) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function getQuickSheetStats(player) {
+  const s = player?.sheet?.parsed || {};
+  const hpMax = safeNum(getFrom(s, 'vitality.hp-max.value', null), null);
+  const hpCur = safeNum(getFrom(s, 'vitality.hp-current.value', null), null);
+  const ac = safeNum(getFrom(s, 'vitality.ac.value', null), null);
+  const speed = safeNum(getFrom(s, 'vitality.speed.value', null), null);
+  const lvl = safeNum(getFrom(s, 'info.level.value', null), null);
+  const stats = {
+    str: safeNum(getFrom(s, 'stats.str.score', null), null),
+    dex: safeNum(getFrom(s, 'stats.dex.score', null), null),
+    con: safeNum(getFrom(s, 'stats.con.score', null), null),
+    int: safeNum(getFrom(s, 'stats.int.score', null), null),
+    wis: safeNum(getFrom(s, 'stats.wis.score', null), null),
+    cha: safeNum(getFrom(s, 'stats.cha.score', null), null)
+  };
+  return { hpMax, hpCur, ac, speed, lvl, stats };
+}
+
+function ensureSheetPath(sheetObj, path) {
+  const parts = String(path || '').split('.').filter(Boolean);
+  let cur = sheetObj;
+  for (let i = 0; i < parts.length; i++) {
+    const k = parts[i];
+    if (i === parts.length - 1) return { parent: cur, key: k };
+    if (!cur[k] || typeof cur[k] !== 'object') cur[k] = {};
+    cur = cur[k];
+  }
+  return { parent: sheetObj, key: null };
+}
+
+function upsertSheetNumber(player, path, value) {
+  const pid = String(player?.id || '');
+  if (!pid) return;
+  const current = players.find(p => String(p?.id) === pid);
+  if (!current) return;
+  const nextSheet = deepClone(current.sheet || { parsed: {} });
+  if (!nextSheet.parsed || typeof nextSheet.parsed !== 'object') nextSheet.parsed = {};
+  const { parent, key } = ensureSheetPath(nextSheet.parsed, path);
+  if (!parent || !key) return;
+  if (!parent[key] || typeof parent[key] !== 'object') parent[key] = {};
+  parent[key].value = value;
+  // оптимистично обновляем локально
+  current.sheet = nextSheet;
+  sendMessage({ type: 'setPlayerSheet', id: pid, sheet: nextSheet });
+}
+
+// ================== HP BAR (always on top) ==================
+function updateHpBar(player, tokenEl) {
+  const pid = String(player?.id || '');
+  if (!pid) return;
+  let bar = hpBarElements.get(pid);
+
+  const size = Number(player?.size) || 1;
+
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'token-hpbar';
+    bar.innerHTML = `<div class="fill"></div><div class="txt"></div>`;
+    board.appendChild(bar);
+    hpBarElements.set(pid, bar);
+  }
+
+  if (!tokenEl || tokenEl.style.display === 'none' || player.x === null || player.y === null) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  const { hpMax, hpCur } = getQuickSheetStats(player);
+  const max = (hpMax !== null ? Math.max(0, hpMax) : 0);
+  const cur = (hpCur !== null ? hpCur : max);
+  const pct = max > 0 ? Math.max(0, Math.min(100, Math.round((cur / max) * 100))) : 0;
+
+  bar.style.display = 'block';
+  bar.style.width = `${size * 50}px`;
+  bar.style.left = `${tokenEl.offsetLeft}px`;
+  bar.style.top = `${tokenEl.offsetTop - 14}px`;
+
+  const fill = bar.querySelector('.fill');
+  const txt = bar.querySelector('.txt');
+  if (fill) fill.style.width = `${pct}%`;
+  if (txt) txt.textContent = `${cur ?? 0}/${max ?? 0}`;
+}
+
+// ================== MINI POPUP (dblclick on token) ==================
+let tokenMiniEl = null;
+let tokenMiniPlayerId = null;
+
+function closeTokenMini() {
+  if (tokenMiniEl) {
+    tokenMiniEl.remove();
+    tokenMiniEl = null;
+    tokenMiniPlayerId = null;
+  }
+}
+
+function formatVal(v, fallback = '—') {
+  return (v === null || v === undefined || v === '' || (typeof v === 'number' && !Number.isFinite(v))) ? fallback : String(v);
+}
+
+function positionTokenMini(tokenEl) {
+  if (!tokenMiniEl || !tokenEl) return;
+  // ставим примерно над токеном, по центру
+  const left = tokenEl.offsetLeft + (tokenEl.offsetWidth / 2);
+  const top = tokenEl.offsetTop - 8;
+  tokenMiniEl.style.left = `${left}px`;
+  tokenMiniEl.style.top = `${top}px`;
+  tokenMiniEl.style.transform = 'translate(-50%, -100%)';
+
+  // держим в пределах поля (по возможности)
+  const b = board.getBoundingClientRect();
+  const r = tokenMiniEl.getBoundingClientRect();
+  let dx = 0;
+  let dy = 0;
+  if (r.left < b.left) dx = b.left - r.left + 6;
+  if (r.right > b.right) dx = -(r.right - b.right + 6);
+  if (r.top < b.top) dy = b.top - r.top + 6;
+  if (dx || dy) {
+    const curLeft = Number(tokenMiniEl.style.left.replace('px','')) || left;
+    const curTop = Number(tokenMiniEl.style.top.replace('px','')) || top;
+    tokenMiniEl.style.left = `${curLeft + dx}px`;
+    tokenMiniEl.style.top = `${curTop + dy}px`;
+  }
+}
+
+function openTokenMini(playerId) {
+  const p = players.find(pp => String(pp?.id) === String(playerId));
+  if (!p) return;
+  const tokenEl = playerElements.get(p.id);
+  if (!tokenEl || tokenEl.style.display === 'none') return;
+
+  // toggle
+  if (tokenMiniEl && tokenMiniPlayerId === p.id) {
+    closeTokenMini();
+    return;
+  }
+  closeTokenMini();
+
+  const q = getQuickSheetStats(p);
+  const maxHp = (q.hpMax !== null ? q.hpMax : 0);
+  const curHp = (q.hpCur !== null ? q.hpCur : maxHp);
+
+  const card = document.createElement('div');
+  card.className = 'token-mini';
+  card.innerHTML = `
+    <div class="title">${String(p.name || 'Персонаж')}</div>
+    <div class="section">
+      <div class="section-title">Здоровье</div>
+      <div class="hp-fields">
+        <label class="hp-field">
+          <span>Тек.</span>
+          <input type="number" class="hp-cur" min="0" max="999" value="${formatVal(curHp, 0)}" />
+        </label>
+        <label class="hp-field">
+          <span>Макс.</span>
+          <input type="number" class="hp-max" min="0" max="999" value="${formatVal(maxHp, 0)}" />
+        </label>
+      </div>
+      <div class="hp-delta">
+        <button type="button" class="hp-delta-btn hp-delta-minus">−</button>
+        <input type="number" class="hp-delta-val" min="0" max="999" value="0" />
+        <button type="button" class="hp-delta-btn hp-delta-plus">+</button>
+      </div>
+    </div>
+
+    <div class="triple">
+      <div class="mini-box"><span class="k">КД</span><span class="v">${formatVal(q.ac)}</span></div>
+      <div class="mini-box"><span class="k">Скорость</span><span class="v">${formatVal(q.speed)}</span></div>
+      <div class="mini-box"><span class="k">Уровень</span><span class="v">${formatVal(q.lvl)}</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Характеристики</div>
+      <div class="stats-grid">
+        <div class="stat-box"><span class="k">СИЛ</span><span class="v">${formatVal(q.stats.str)}</span></div>
+        <div class="stat-box"><span class="k">ИНТ</span><span class="v">${formatVal(q.stats.int)}</span></div>
+        <div class="stat-box"><span class="k">ЛОВ</span><span class="v">${formatVal(q.stats.dex)}</span></div>
+        <div class="stat-box"><span class="k">МУД</span><span class="v">${formatVal(q.stats.wis)}</span></div>
+        <div class="stat-box"><span class="k">ТЕЛ</span><span class="v">${formatVal(q.stats.con)}</span></div>
+        <div class="stat-box"><span class="k">ХАР</span><span class="v">${formatVal(q.stats.cha)}</span></div>
+      </div>
+    </div>
+
+    <button class="btn" type="button">Лист персонажа</button>
+  `;
+
+  // prevent board clicks
+  card.addEventListener('mousedown', (e) => e.stopPropagation());
+  card.addEventListener('click', (e) => e.stopPropagation());
+
+  const hpCurInput = card.querySelector('.hp-cur');
+  const hpMaxInput = card.querySelector('.hp-max');
+  const hpDeltaInput = card.querySelector('.hp-delta-val');
+  const hpDeltaMinus = card.querySelector('.hp-delta-minus');
+  const hpDeltaPlus = card.querySelector('.hp-delta-plus');
+  const sheetBtn = card.querySelector('.btn');
+
+  const applyHp = () => {
+    const cur = safeNum(hpCurInput?.value, 0) ?? 0;
+    const max = safeNum(hpMaxInput?.value, 0) ?? 0;
+    upsertSheetNumber(p, 'vitality.hp-max', Math.max(0, max));
+    upsertSheetNumber(p, 'vitality.hp-current', Math.max(0, Math.min(Math.max(0, max), cur)));
+    // сразу обновим полоску
+    updateHpBar(p, tokenEl);
+  };
+
+  hpCurInput?.addEventListener('change', applyHp);
+  hpMaxInput?.addEventListener('change', applyHp);
+
+  const applyDelta = (sign) => {
+    const delta = safeNum(hpDeltaInput?.value, 0) ?? 0;
+    if (!delta) return;
+    const cur = safeNum(hpCurInput?.value, 0) ?? 0;
+    const max = safeNum(hpMaxInput?.value, 0) ?? 0;
+    const next = (sign < 0) ? (cur - delta) : (cur + delta);
+    const clamped = Math.max(0, Math.min(Math.max(0, max), next));
+    if (hpCurInput) hpCurInput.value = String(clamped);
+    applyHp();
+  };
+
+  hpDeltaMinus?.addEventListener('click', () => applyDelta(-1));
+  hpDeltaPlus?.addEventListener('click', () => applyDelta(1));
+
+  sheetBtn?.addEventListener('click', () => {
+    window.InfoModal?.open?.(p);
+  });
+
+  board.appendChild(card);
+  tokenMiniEl = card;
+  tokenMiniPlayerId = p.id;
+  // position after append (so size is known)
+  positionTokenMini(tokenEl);
+}
+
+// close mini on outside click / Esc
+document.addEventListener('mousedown', (e) => {
+  if (!tokenMiniEl) return;
+  if (e.target && tokenMiniEl.contains(e.target)) return;
+  closeTokenMini();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeTokenMini();
+});
+
+// ================== PLAYER POSITION ==================
+function setPlayerPosition(player) {
+  let el = playerElements.get(player.id);
+
+  if (!el) {
+    el = document.createElement('div');
+    el.classList.add('player');
+    el.textContent = player.name?.[0] || '?';
+    el.style.backgroundColor = player.color;
+    el.style.position = 'absolute';
+
+    el.addEventListener('mousedown', () => {
+      if (!editEnvironment) {
+        if (selectedPlayer) {
+          const prev = playerElements.get(selectedPlayer.id);
+          if (prev) prev.classList.remove('selected');
+        }
+        selectedPlayer = player;
+        el.classList.add('selected');
+      }
+    });
+
+    // двойной клик — мини-окно со статами
+    el.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      openTokenMini(player.id);
+    });
+
+    board.appendChild(el);
+    playerElements.set(player.id, el);
+    player.element = el;
+  }
+
+  el.textContent = player.name ? player.name[0] : '?';
+  el.style.backgroundColor = player.color;
+  el.style.width = `${player.size * 50}px`;
+  el.style.height = `${player.size * 50}px`;
+
+  if (player.x === null || player.y === null) {
+    el.style.display = 'none';
+    updateHpBar(player, el);
+    return;
+  }
+  el.style.display = 'flex';
+
+  const maxX = boardWidth - player.size;
+  const maxY = boardHeight - player.size;
+  const x = Math.min(Math.max(player.x, 0), maxX);
+  const y = Math.min(Math.max(player.y, 0), maxY);
+
+  const cell = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+  if (cell) {
+    el.style.left = `${cell.offsetLeft}px`;
+    el.style.top = `${cell.offsetTop}px`;
+  }
+
+  updateHpBar(player, el);
+  if (tokenMiniEl && tokenMiniPlayerId === player.id) {
+    positionTokenMini(el);
+  }
+}
+
+// ================== NO-OVERLAP HELPERS (CLIENT SIDE) ==================
+function rectsOverlap(ax, ay, as, bx, by, bs) {
+  return ax < (bx + bs) && (ax + as) > bx && ay < (by + bs) && (ay + as) > by;
+}
+
+function isAreaFreeClient(ignoreId, x, y, size) {
+  for (const other of players) {
+    if (!other) continue;
+    if (ignoreId && other.id === ignoreId) continue;
+    if (other.x === null || other.y === null) continue;
+    const os = Number(other.size) || 1;
+    if (rectsOverlap(x, y, size, other.x, other.y, os)) return false;
+  }
+  return true;
+}
+
+function findFirstFreeSpotClient(size) {
+  const maxX = boardWidth - size;
+  const maxY = boardHeight - size;
+  for (let y = 0; y <= maxY; y++) {
+    for (let x = 0; x <= maxX; x++) {
+      if (isAreaFreeClient(null, x, y, size)) return { x, y };
+    }
+  }
+  return null;
+}
+
+// ================== ADD PLAYER ==================
+addPlayerBtn.addEventListener('click', () => {
+  const name = playerNameInput.value.trim();
+  if (!name) return alert("Введите имя");
+
+  const player = {
+    name,
+    color: playerColorInput.value,
+    size: parseInt(playerSizeInput.value, 10),
+    isBase: !!isBaseCheckbox?.checked,
+    isAlly: !!isAllyCheckbox?.checked
+  };
+
+  sendMessage({ type: 'addPlayer', player });
+
+  playerNameInput.value = '';
+  if (isBaseCheckbox && !isBaseCheckbox.disabled) isBaseCheckbox.checked = false;
+  if (isAllyCheckbox) isAllyCheckbox.checked = false;
+});
+
+// ================== MOVE PLAYER ==================
+board.addEventListener('click', e => {
+  if (!selectedPlayer) return;
+  const cell = e.target.closest('.cell');
+  if (!cell) return;
+
+  let x = parseInt(cell.dataset.x, 10);
+  let y = parseInt(cell.dataset.y, 10);
+  if (x + selectedPlayer.size > boardWidth) x = boardWidth - selectedPlayer.size;
+  if (y + selectedPlayer.size > boardHeight) y = boardHeight - selectedPlayer.size;
+
+  // быстрый локальный чек (сервер всё равно проверит)
+  const size = Number(selectedPlayer.size) || 1;
+  if (!isAreaFreeClient(selectedPlayer.id, x, y, size)) {
+    alert("Эта клетка занята другим персонажем");
+    return;
+  }
+
+  sendMessage({ type: 'movePlayer', id: selectedPlayer.id, x, y });
+  const el = playerElements.get(selectedPlayer.id);
+  if (el) el.classList.remove('selected');
+  selectedPlayer = null;
+});
+
+// ===== Dice Viz (panel + canvas animation) =====
+const diceVizKind = document.getElementById("dice-viz-kind");
+const diceVizValue = document.getElementById("dice-viz-value");
+const diceCanvas = document.getElementById("dice-canvas");
+const diceCtx = diceCanvas?.getContext?.("2d");
+
+let diceAnimFrame = null;
+let diceAnimBusy = false;
+
+// ===== Other players dice feed (right of dice panel) =====
+let othersDiceWrap = null;
+
+function ensureOthersDiceUI() {
+  if (othersDiceWrap) return othersDiceWrap;
+
+  // Если блок уже есть в HTML (в стеке над панелью) — используем его
+  const existing = document.getElementById('dice-others');
+  if (existing) {
+    othersDiceWrap = existing;
+    if (!othersDiceWrap.querySelector('.dice-others__title')) {
+      othersDiceWrap.innerHTML = `
+        <div class="dice-others__title">Броски других</div>
+        <div class="dice-others__list" aria-hidden="true"></div>
+      `;
+    }
+    // если HTML старый и нет списка — создаём
+    if (!othersDiceWrap.querySelector('.dice-others__list')) {
+      const list = document.createElement('div');
+      list.className = 'dice-others__list';
+      list.setAttribute('aria-hidden', 'true');
+      othersDiceWrap.appendChild(list);
+    }
+    return othersDiceWrap;
+  }
+
+  // Fallback: старый вариант (если HTML не обновлён)
+  othersDiceWrap = document.createElement("div");
+  othersDiceWrap.className = "dice-others";
+  othersDiceWrap.innerHTML = `
+    <div class="dice-others__title">Броски других</div>
+    <div class="dice-others__list" aria-hidden="true"></div>
+  `;
+  document.body.appendChild(othersDiceWrap);
+  return othersDiceWrap;
+}
+
+// показываем результат броска в основной панели (используется для серверных инициатив и т.п.)
+async function applyDiceEventToMain(ev) {
+  if (!ev) return;
+
+  const sides = Number(ev.sides) || null;
+  const count = Number(ev.count) || 1;
+  const bonus = Number(ev.bonus) || 0;
+
+  // подпись
+  if (diceVizKind) {
+    diceVizKind.textContent = ev.kindText || (sides ? `d${sides}` : "Бросок");
+  }
+
+  // значение — итог (с бонусом)
+  if (diceVizValue) {
+    diceVizValue.textContent = String(Number(ev.total) || 0);
+  }
+
+  // фишки — только "сырой" кубик (rolls)
+  const rolls = Array.isArray(ev.rolls) ? ev.rolls.map(n => Number(n) || 0) : [];
+  renderRollChips(rolls.length ? rolls : [Number(ev.total) || 0], -1, sides);
+
+  // анимация кубика (как при обычном "Бросить")
+  if (!diceAnimBusy && diceCtx && diceCanvas && sides && rolls.length) {
+    diceAnimBusy = true;
+    try {
+      for (const r of rolls) {
+        await animateSingleRoll(sides, r);
+      }
+    } finally {
+      diceAnimBusy = false;
+    }
+  }
+
+  // крит-подсветку оставляем только для чистого d20 (без бонуса)
+  if (sides === 20 && count === 1 && bonus === 0 && rolls.length === 1) {
+    applyPureD20CritUI(rolls[0]);
+  } else {
+    clearCritUI();
+  }
+}
+
+function pushOtherDiceEvent(ev) {
+  ensureOthersDiceUI();
+
+  // не показываем свои же броски
+  if (ev.fromId && typeof myId !== "undefined" && ev.fromId === myId) return;
+
+  const item = document.createElement("div");
+  item.className = "dice-others__item";
+  item.dataset.crit = ev.crit || "";
+
+  const rollsText = (ev.rolls && ev.rolls.length)
+    ? ev.rolls.join(" + ")
+    : "-";
+
+  const head = `${ev.fromName || "Игрок"}: ${ev.kindText || `d${ev.sides} × ${ev.count}`}`;
+
+  // Для одиночного броска с бонусом показываем компактно: "12+4=16"
+  let tail = `${rollsText} = ${ev.total}`;
+  const bonusNum = Number(ev.bonus) || 0;
+  if (Number(ev.count) === 1 && bonusNum !== 0 && Array.isArray(ev.rolls) && ev.rolls.length === 1) {
+    const r = Number(ev.rolls[0]) || 0;
+    const sign = bonusNum >= 0 ? "+" : "-";
+    tail = `${r}${sign}${Math.abs(bonusNum)}=${ev.total}`;
+  }
+
+  item.innerHTML = `
+    <div class="dice-others__head">${escapeHtmlLocal(head)}</div>
+    <div class="dice-others__body">${escapeHtmlLocal(tail)}</div>
+  `;
+
+  // крит подсветка (если прилетело)
+  if (ev.crit === "crit-fail") item.classList.add("crit-fail");
+  if (ev.crit === "crit-success") item.classList.add("crit-success");
+
+  const list = othersDiceWrap.querySelector('.dice-others__list') || othersDiceWrap;
+  list.appendChild(item);
+
+  // через 5с — плавное исчезновение
+  setTimeout(() => item.classList.add("fade"), 4200);
+  setTimeout(() => item.remove(), 5200);
+}
+
+// маленький экранировщик
+function escapeHtmlLocal(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function clearCritUI() {
+  if (diceVizValue) {
+    diceVizValue.classList.remove("crit-fail", "crit-success");
+  }
+  if (diceRolls) {
+    diceRolls.querySelectorAll(".dice-chip").forEach(ch =>
+      ch.classList.remove("crit-fail", "crit-success")
+    );
+  }
+}
+
+function applyPureD20CritUI(finalValue) {
+  // крит только для "чистого" d20 (без бонуса), поэтому сюда передаём значение когда условия уже проверены
+  clearCritUI();
+
+  if (finalValue === 1) {
+    if (diceVizValue) diceVizValue.classList.add("crit-fail");
+    const chip = diceRolls?.querySelector(".dice-chip");
+    if (chip) chip.classList.add("crit-fail");
+    return " — КРИТИЧЕСКИЙ ПРОВАЛ (1)";
+  }
+
+  if (finalValue === 20) {
+    if (diceVizValue) diceVizValue.classList.add("crit-success");
+    const chip = diceRolls?.querySelector(".dice-chip");
+    if (chip) chip.classList.add("crit-success");
+    return " — КРИТИЧЕСКИЙ УСПЕХ (20)";
+  }
+
+  return "";
+}
+
+
+function clampInt(v, min, max, fallback) {
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function rollDie(sides) {
+  return Math.floor(Math.random() * sides) + 1;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function drawDieFace(ctx, w, h, sides, value, t) {
+  ctx.clearRect(0, 0, w, h);
+
+  const cx = w / 2;
+  const cy = h / 2;
+
+  // лёгкая тряска/вращение
+  const ang = Math.sin(t * 0.02) * 0.22;
+  const scale = 1 + Math.sin(t * 0.015) * 0.02;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(ang);
+  ctx.scale(scale, scale);
+  ctx.translate(-cx, -cy);
+
+  const pad = 14;
+  const rw = w - pad * 2;
+  const rh = h - pad * 2;
+  const r = 18;
+
+  // тень
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = "#000";
+  roundRect(ctx, pad + 3, pad + 6, rw, rh, r);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // тело
+  ctx.fillStyle = "rgba(255,255,255,0.06)";
+  ctx.strokeStyle = "rgba(255,255,255,0.20)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, pad, pad, rw, rh, r);
+  ctx.fill();
+  ctx.stroke();
+
+  // подпись dN
+  ctx.fillStyle = "rgba(255,255,255,0.70)";
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(`d${sides}`, cx, pad + 26);
+
+  // значение
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.font = "900 46px sans-serif";
+  ctx.fillText(String(value), cx, cy + 18);
+
+  ctx.restore();
+}
+
+function renderRollChips(values, activeIndex, sides = null) {
+  if (!diceRolls) return;
+  diceRolls.innerHTML = "";
+  values.forEach((v, i) => {
+    const chip = document.createElement("span");
+    chip.className = "dice-chip" + (i === activeIndex ? " active" : "");
+    // ✅ Подсветка 1 и 20 для любого количества одновременно брошенных d20
+    if (Number(sides) === 20 && v !== null) {
+      if (v === 1) chip.classList.add('crit-fail');
+      if (v === 20) chip.classList.add('crit-success');
+    }
+    chip.textContent = (v === null ? "…" : String(v));
+    diceRolls.appendChild(chip);
+  });
+}
+
+function animateSingleRoll(sides, finalValue) {
+  // Возвращает Promise, чтобы можно было кидать несколько кубов по очереди
+  return new Promise((resolve) => {
+    if (!diceCtx || !diceCanvas) {
+      resolve();
+      return;
+    }
+
+    const start = performance.now();
+    const dur = 420; // ms на один кубик
+    let lastShown = rollDie(sides);
+
+    function frame(now) {
+      const t = now - start;
+      const p = Math.min(1, t / dur);
+
+      const changeProb = 0.92 - 0.86 * p; // 0.92 -> 0.06
+      if (Math.random() < changeProb) lastShown = rollDie(sides);
+
+      drawDieFace(diceCtx, diceCanvas.width, diceCanvas.height, sides, lastShown, t);
+
+      if (p < 1) {
+        diceAnimFrame = requestAnimationFrame(frame);
+      } else {
+        drawDieFace(diceCtx, diceCanvas.width, diceCanvas.height, sides, finalValue, t + 999);
+        resolve();
+      }
+    }
+
+    if (diceAnimFrame) cancelAnimationFrame(diceAnimFrame);
+    diceAnimFrame = requestAnimationFrame(frame);
+  });
+}
+
+// ===== other players dice feed =====
+let diceOthersWrap = null;
+
+function ensureDiceOthersUI() {
+  if (diceOthersWrap) return diceOthersWrap;
+
+  diceOthersWrap = document.createElement('div');
+  diceOthersWrap.className = 'dice-others';
+  diceOthersWrap.innerHTML = `<div class="dice-others__title">Броски других</div>`;
+  document.body.appendChild(diceOthersWrap);
+
+  return diceOthersWrap;
+}
+
+function pushOtherDice(ev) {
+  // не показываем свои же броски
+  if (ev?.fromId && typeof myId !== 'undefined' && ev.fromId === myId) return;
+
+  ensureDiceOthersUI();
+
+  const item = document.createElement('div');
+  item.className = 'dice-others__item';
+
+  if (ev.crit === 'crit-fail') item.classList.add('crit-fail');
+  if (ev.crit === 'crit-success') item.classList.add('crit-success');
+
+  const head = `${ev.fromName || 'Игрок'}: ${ev.kindText || `d${ev.sides} × ${ev.count}`}`;
+  const rollsText = (ev.rolls && ev.rolls.length) ? ev.rolls.join(' + ') : '-';
+
+  // Для одиночного броска с бонусом показываем компактно: "12+4=16"
+  let body = `${rollsText} = ${ev.total}`;
+  const bonusNum = Number(ev.bonus) || 0;
+  if (Number(ev.count) === 1 && bonusNum !== 0 && Array.isArray(ev.rolls) && ev.rolls.length === 1) {
+    const r = Number(ev.rolls[0]) || 0;
+    const sign = bonusNum >= 0 ? '+' : '-';
+    body = `${r}${sign}${Math.abs(bonusNum)}=${ev.total}`;
+  }
+
+  item.innerHTML = `
+    <div class="dice-others__head">${escapeHtmlLocal(head)}</div>
+    <div class="dice-others__body">${escapeHtmlLocal(body)}</div>
+  `;
+
+  diceOthersWrap.appendChild(item);
+
+  // затухание и удаление
+  setTimeout(() => item.classList.add('fade'), 4200);
+  setTimeout(() => item.remove(), 5200);
+}
+
+// маленький экранировщик (чтобы имена не ломали HTML)
+function escapeHtmlLocal(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+
+// ===== API: programmatic dice rolls (used by InfoModal weapons) =====
+window.DicePanel = window.DicePanel || {};
+// Programmatic dice roll used by InfoModal etc.
+// If silent=true, it will only animate/update the local dice panel UI and will NOT send log/diceEvent.
+// Returns: {sides,count,bonus,rolls,sum,total}
+window.DicePanel.roll = async ({ sides = 20, count = 1, bonus = 0, kindText = null, silent = false } = {}) => {
+  if (diceAnimBusy) return;
+  diceAnimBusy = true;
+
+  const S = clampInt(sides, 2, 100, 20);
+  const C = clampInt(count, 1, 20, 1);
+  const B = Number(bonus) || 0;
+
+  // чтобы UI панели соответствовал броску
+  if (dice) dice.value = String(S);
+  if (diceCountInput) diceCountInput.value = String(C);
+
+  clearCritUI();
+
+  const finals = Array.from({ length: C }, () => rollDie(S));
+  const shown = Array.from({ length: C }, () => null);
+
+  renderRollChips(shown, 0, S);
+
+  if (diceVizKind) diceVizKind.textContent = kindText ? String(kindText) : `d${S} × ${C}`;
+  if (diceVizValue) diceVizValue.textContent = "…";
+
+  for (let i = 0; i < C; i++) {
+    renderRollChips(shown, i, S);
+    await animateSingleRoll(S, finals[i]);
+    shown[i] = finals[i];
+    renderRollChips(shown, Math.min(i + 1, C - 1), S);
+  }
+
+  const sum = finals.reduce((a, b) => a + b, 0);
+  const total = sum + B;
+
+// Показ значения
+if (diceVizValue) diceVizValue.textContent = String(total);
+renderRollChips(shown, -1, S);
+
+// ✅ крит-подсветка ТОЛЬКО для чистого d20 (без бонуса)
+let critNote = "";
+if (S === 20 && C === 1 && B === 0) {
+  critNote = applyPureD20CritUI(finals[0]);
+} else {
+  clearCritUI();
+}
+
+  // в лог — тоже отправим (если не silent)
+  if (!silent) {
+    try {
+      if (typeof sendMessage === "function") {
+        const bonusTxt = B ? ` ${B >= 0 ? "+" : "-"} ${Math.abs(B)}` : "";
+        sendMessage({
+          type: 'log',
+          text: `${kindText || `Бросок d${S} × ${C}`}: ${finals.join(' + ')} = ${sum}${bonusTxt} => ${total}${critNote}`
+        });
+
+        sendMessage({
+          type: "diceEvent",
+          event: {
+            kindText: kindText ? String(kindText) : `d${S} × ${C}`,
+            sides: S,
+            count: C,
+            bonus: B,
+            rolls: finals,
+            total: total,
+            crit: (S === 20 && C === 1 && B === 0)
+              ? (finals[0] === 1 ? "crit-fail" : finals[0] === 20 ? "crit-success" : "")
+              : ""
+          }
+        });
+      }
+    } catch {}
+  }
+
+  diceAnimBusy = false;
+
+  return { sides: S, count: C, bonus: B, rolls: finals, sum, total };
+};
+
