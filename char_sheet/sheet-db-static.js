@@ -523,4 +523,9 @@ function bindLanguagesUi(root, player, canEdit) {
   CS.db.wireQuickBasicInteractions = wireQuickBasicInteractions;
   window.wireQuickBasicInteractions = wireQuickBasicInteractions;
 
+
+  // Expose close-handler wiring (backward-compat)
+  CS.db.ensureWiredCloseHandlers = ensureWiredCloseHandlers;
+  window.ensureWiredCloseHandlers = ensureWiredCloseHandlers;
+
 })();
