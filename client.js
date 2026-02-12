@@ -54,7 +54,6 @@ const playerColorInput = document.getElementById('player-color');
 const playerSizeInput = document.getElementById('player-size');
 
 const isBaseCheckbox = document.getElementById('is-base');
-
 const isAllyCheckbox = document.getElementById('is-ally');
 
 const dice = document.getElementById('dice');
@@ -202,12 +201,6 @@ function applyRoleToUI() {
   // "Управление игроками" используется всеми, кроме зрителей
   const pm = document.getElementById('player-management');
   if (pm) pm.style.display = spectator ? 'none' : '';
-
-  // Галочка "Союзник" — только для ГМ
-  if (typeof isAllyCheckbox !== 'undefined' && isAllyCheckbox) {
-    const lbl = isAllyCheckbox.closest('label');
-    if (lbl) lbl.style.display = gm ? '' : 'none';
-  }
 
 
   // Disable GM-only buttons defensively
@@ -531,9 +524,253 @@ let wallMode = null;
 let mouseDown = false;
 
 const playerElements = new Map();
-const hpBarElements = new Map(); // playerId -> hp bar element (absolute overlay)
-let tokenQuickPopupEl = null;
-let tokenQuickPopupForId = null;
+// HP bars над токенами (всегда на переднем плане)
+const hpBarElements = new Map(); // playerId -> { root, fill, text }
+// Мини-окошко (двойной клик по токену)
+const miniPopups = new Map(); // playerId -> element
+
+function _num(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function getPlayerVitals(p) {
+  const sheet = p?.sheet || {};
+  const vit = sheet.vitality || sheet?.parsed?.vitality || {};
+  const hpMax = _num(vit?.["hp-max"]?.value ?? vit?.hpMax?.value ?? vit?.hp?.max ?? vit?.hp_max ?? 0, 0);
+  const hpCur = _num(vit?.["hp-current"]?.value ?? vit?.hpCur?.value ?? vit?.hp?.current ?? vit?.hp_current ?? 0, 0);
+  const hpTemp = _num(vit?.["hp-temp"]?.value ?? vit?.hpTemp?.value ?? vit?.hp?.temp ?? vit?.hp_temp ?? 0, 0);
+  const ac = _num(vit?.ac?.value ?? sheet?.parsed?.vitality?.ac?.value ?? 0, 0);
+  const spd = _num(vit?.speed?.value ?? sheet?.parsed?.vitality?.speed?.value ?? 0, 0);
+  // уровень чаще всего в sheet.parsed.profile.level.value
+  const lvl = _num(sheet?.parsed?.profile?.level?.value ?? sheet?.parsed?.level?.value ?? sheet?.parsed?.lvl ?? 0, 0);
+  const stats = sheet?.parsed?.stats || {};
+  return {
+    hpMax,
+    hpCur,
+    hpTemp,
+    ac,
+    spd,
+    lvl,
+    stats
+  };
+}
+
+function ensureHpBar(player) {
+  const id = player.id;
+  let obj = hpBarElements.get(id);
+  if (obj) return obj;
+
+  const root = document.createElement('div');
+  root.className = 'hpbar';
+  root.innerHTML = `
+    <div class="hpbar__track">
+      <div class="hpbar__fill" aria-hidden="true"></div>
+      <div class="hpbar__text"></div>
+    </div>
+  `;
+  board.appendChild(root);
+  obj = {
+    root,
+    fill: root.querySelector('.hpbar__fill'),
+    text: root.querySelector('.hpbar__text')
+  };
+  hpBarElements.set(id, obj);
+  return obj;
+}
+
+function removeHpBar(playerId) {
+  const obj = hpBarElements.get(playerId);
+  if (obj?.root) obj.root.remove();
+  hpBarElements.delete(playerId);
+}
+
+function closeMiniPopup(playerId) {
+  const el = miniPopups.get(playerId);
+  if (el) el.remove();
+  miniPopups.delete(playerId);
+}
+
+function positionMiniPopupForPlayer(player) {
+  const pop = miniPopups.get(player.id);
+  const el = playerElements.get(player.id);
+  if (!pop || !el) return;
+  if (player.x === null || player.y === null) {
+    pop.style.display = 'none';
+    return;
+  }
+  pop.style.display = 'block';
+  const rect = el.getBoundingClientRect();
+  const boardRect = board.getBoundingClientRect();
+  // позиционируем над токеном с небольшим отступом
+  const left = rect.left - boardRect.left + rect.width / 2;
+  const top = rect.top - boardRect.top - 8;
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+}
+
+function openMiniPopup(player) {
+  // toggle
+  if (miniPopups.has(player.id)) {
+    closeMiniPopup(player.id);
+    return;
+  }
+
+  // закрываем остальные
+  Array.from(miniPopups.keys()).forEach((id) => closeMiniPopup(id));
+
+  const pop = document.createElement('div');
+  pop.className = 'token-popup';
+  pop.setAttribute('data-player-id', String(player.id));
+  pop.innerHTML = `
+    <div class="token-popup__panel">
+      <div class="token-popup__title"></div>
+      <div class="token-popup__grid">
+        <label class="tp-row">
+          <span>HP</span>
+          <input type="number" class="tp-input" data-tp="hpCur" min="0" step="1">
+          <span class="tp-sep">/</span>
+          <input type="number" class="tp-input" data-tp="hpMax" min="0" step="1">
+        </label>
+        <div class="tp-row">
+          <span>КЗ</span>
+          <div class="tp-val" data-tp="ac">-</div>
+          <span>Скор.</span>
+          <div class="tp-val" data-tp="spd">-</div>
+        </div>
+        <div class="tp-row">
+          <span>Уров.</span>
+          <div class="tp-val" data-tp="lvl">-</div>
+        </div>
+        <div class="tp-stats" data-tp="stats"></div>
+      </div>
+      <div class="token-popup__actions">
+        <button type="button" class="tp-btn" data-tp-open-sheet>Лист персонажа</button>
+      </div>
+    </div>
+  `;
+
+  // чтобы центрировать по токену
+  pop.style.position = 'absolute';
+  pop.style.transform = 'translate(-50%, -100%)';
+  board.appendChild(pop);
+  miniPopups.set(player.id, pop);
+
+  const title = pop.querySelector('.token-popup__title');
+  if (title) title.textContent = player.name || 'Персонаж';
+
+  const applyToUi = () => {
+    const v = getPlayerVitals(player);
+    const hpCurEl = pop.querySelector('[data-tp="hpCur"]');
+    const hpMaxEl = pop.querySelector('[data-tp="hpMax"]');
+    if (hpCurEl) hpCurEl.value = String(v.hpCur);
+    if (hpMaxEl) hpMaxEl.value = String(v.hpMax);
+    const acEl = pop.querySelector('[data-tp="ac"]');
+    const spdEl = pop.querySelector('[data-tp="spd"]');
+    const lvlEl = pop.querySelector('[data-tp="lvl"]');
+    if (acEl) acEl.textContent = v.ac ? String(v.ac) : '-';
+    if (spdEl) spdEl.textContent = v.spd ? String(v.spd) : '-';
+    if (lvlEl) lvlEl.textContent = v.lvl ? String(v.lvl) : '-';
+
+    const statsBox = pop.querySelector('[data-tp="stats"]');
+    if (statsBox) {
+      const s = v.stats || {};
+      const mk = (k, label) => {
+        const val = _num(s?.[k]?.value ?? s?.[k] ?? '-', '-');
+        return `<div class="tp-stat"><span class="k">${label}</span><span class="v">${val}</span></div>`;
+      };
+      statsBox.innerHTML = [
+        mk('str', 'СИЛ'),
+        mk('dex', 'ЛОВ'),
+        mk('con', 'ТЕЛ'),
+        mk('int', 'ИНТ'),
+        mk('wis', 'МДР'),
+        mk('cha', 'ХАР'),
+      ].join('');
+    }
+  };
+
+  applyToUi();
+  positionMiniPopupForPlayer(player);
+
+  // действия
+  pop.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t?.closest?.('[data-tp-open-sheet]')) {
+      e.stopPropagation();
+      window.InfoModal?.open?.(player);
+      return;
+    }
+  });
+
+  // HP редактирование — сохраняем как в листе персонажа
+  const saveHp = () => {
+    const sheet = player.sheet;
+    if (!sheet) return;
+    if (!sheet.vitality) sheet.vitality = {};
+    if (!sheet.vitality["hp-max"]) sheet.vitality["hp-max"] = { value: 0 };
+    if (!sheet.vitality["hp-current"]) sheet.vitality["hp-current"] = { value: 0 };
+    const hpCurEl = pop.querySelector('[data-tp="hpCur"]');
+    const hpMaxEl = pop.querySelector('[data-tp="hpMax"]');
+    const max = Math.max(0, _num(hpMaxEl?.value, 0));
+    const cur = Math.max(0, Math.min(max, _num(hpCurEl?.value, 0)));
+    sheet.vitality["hp-max"].value = max;
+    sheet.vitality["hp-current"].value = cur;
+    sendMessage({ type: 'setPlayerSheet', id: player.id, sheet });
+  };
+
+  pop.addEventListener('change', (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement)) return;
+    if (el.getAttribute('data-tp') === 'hpCur' || el.getAttribute('data-tp') === 'hpMax') {
+      saveHp();
+    }
+  });
+
+  // закрытие по клику вне
+  const onDocDown = (e) => {
+    if (!miniPopups.has(player.id)) {
+      document.removeEventListener('mousedown', onDocDown, true);
+      return;
+    }
+    if (e.target && pop.contains(e.target)) return;
+    closeMiniPopup(player.id);
+    document.removeEventListener('mousedown', onDocDown, true);
+  };
+  document.addEventListener('mousedown', onDocDown, true);
+}
+
+function updateHpBarForPlayer(player) {
+  const tokenEl = playerElements.get(player.id);
+  if (!tokenEl) return;
+
+  const v = getPlayerVitals(player);
+  const bar = ensureHpBar(player);
+
+  // если игрок не на поле — скрываем
+  if (player.x === null || player.y === null) {
+    bar.root.style.display = 'none';
+    return;
+  }
+  bar.root.style.display = 'block';
+
+  const max = Math.max(0, v.hpMax);
+  const cur = Math.max(0, v.hpCur);
+  const temp = Math.max(0, v.hpTemp);
+  const denom = Math.max(1, max);
+  const pct = Math.max(0, Math.min(100, Math.round((cur / denom) * 100)));
+  bar.fill.style.width = `${pct}%`;
+  bar.text.textContent = temp > 0 ? `(${temp}) ${cur}/${max}` : `${cur}/${max}`;
+
+  // позиционируем над токеном
+  const left = tokenEl.offsetLeft;
+  const top = tokenEl.offsetTop;
+  const w = tokenEl.offsetWidth;
+  bar.root.style.left = `${left}px`;
+  bar.root.style.top = `${Math.max(0, top - 16)}px`;
+  bar.root.style.width = `${w}px`;
+}
+
 let finishInitiativeSent = false;
 
 // users map (ownerId -> {name, role}) — только подключённые сейчас
@@ -750,14 +987,9 @@ loginDiv.style.display = 'none';
         if (!existingIds.has(id)) {
           el.remove();
           playerElements.delete(id);
-
-          const hb = hpBarElements.get(id);
-          if (hb) hb.remove();
-          hpBarElements.delete(id);
-
-          if (tokenQuickPopupForId && String(tokenQuickPopupForId) === String(id)) {
-            closeTokenQuickPopup();
-          }
+          // чистим хвосты: HP бар и мини-попап
+          try { removeHpBar(id); } catch {}
+          try { closeMiniPopup(id); } catch {}
         }
       });
 
@@ -1271,6 +1503,7 @@ function setPlayerPosition(player) {
     el = document.createElement('div');
     el.classList.add('player');
     el.textContent = player.name?.[0] || '?';
+    el.dataset.playerId = String(player.id);
     el.style.backgroundColor = player.color;
     el.style.position = 'absolute';
 
@@ -1285,26 +1518,17 @@ function setPlayerPosition(player) {
       }
     });
 
-    // HP bar overlay (always on top)
-    if (!hpBarElements.has(player.id)) {
-      const hb = document.createElement('div');
-      hb.className = 'hp-bar';
-      hb.setAttribute('data-hp-player', String(player.id));
-      board.appendChild(hb);
-      hpBarElements.set(player.id, hb);
-    }
-
-    // Quick popup on double click
+    // Двойной клик по токену: мини-окошко (иногда dblclick "съедается", поэтому добавляем fallback)
     el.addEventListener('dblclick', (ev) => {
+      ev.preventDefault();
       ev.stopPropagation();
-      openTokenQuickPopup(player.id);
+      openMiniPopup(player);
     });
-
-    // Safari/dragging sometimes eats dblclick — fallback
     el.addEventListener('click', (ev) => {
       if (ev.detail === 2) {
+        ev.preventDefault();
         ev.stopPropagation();
-        openTokenQuickPopup(player.id);
+        openMiniPopup(player);
       }
     });
 
@@ -1314,15 +1538,16 @@ function setPlayerPosition(player) {
   }
 
   el.textContent = player.name ? player.name[0] : '?';
+  el.dataset.playerId = String(player.id);
   el.style.backgroundColor = player.color;
   el.style.width = `${player.size * 50}px`;
   el.style.height = `${player.size * 50}px`;
 
   if (player.x === null || player.y === null) {
     el.style.display = 'none';
-    const hb = hpBarElements.get(player.id);
-    if (hb) hb.style.display = 'none';
-    if (tokenQuickPopupForId === player.id) closeTokenQuickPopup();
+    // скрываем HP bar / pop-up
+    try { updateHpBarForPlayer(player); } catch {}
+    try { positionMiniPopupForPlayer(player); } catch {}
     return;
   }
   el.style.display = 'flex';
@@ -1338,225 +1563,9 @@ function setPlayerPosition(player) {
     el.style.top = `${cell.offsetTop}px`;
   }
 
-  updateHpBarForPlayer(player, el);
-}
-
-// ================== HP BAR + QUICK TOKEN POPUP ==================
-function getSheetSafe(player) {
-  return player?.sheet?.parsed || null;
-}
-
-function getHpFromSheet(sheet) {
-  const max = Number(sheet?.vitality?.["hp-max"]?.value) || 0;
-  const cur = Number(sheet?.vitality?.["hp-current"]?.value) || 0;
-  const temp = Number(sheet?.vitality?.["hp-temp"]?.value) || 0;
-  return { max, cur, temp };
-}
-
-function updateHpBarForPlayer(player, tokenEl) {
-  const hb = hpBarElements.get(player.id);
-  if (!hb || !tokenEl) return;
-
-  hb.style.display = '';
-  hb.style.position = 'absolute';
-  hb.style.left = tokenEl.style.left || `${tokenEl.offsetLeft}px`;
-  hb.style.top = `${(tokenEl.offsetTop || 0) - 14}px`;
-  hb.style.width = `${tokenEl.offsetWidth || (Number(player.size) || 1) * 50}px`;
-  hb.style.zIndex = '10000';
-  hb.style.pointerEvents = 'none';
-
-  const sheet = getSheetSafe(player) || {};
-  const { max, cur, temp } = getHpFromSheet(sheet);
-
-  const safeMax = Math.max(0, Math.trunc(max));
-  const safeCur = Math.max(0, Math.min(safeMax || 0, Math.trunc(cur)));
-  const safeTemp = Math.max(0, Math.trunc(temp));
-
-  const percent = safeMax > 0 ? Math.max(0, Math.min(100, Math.round((safeCur / safeMax) * 100))) : 0;
-  const tempPercent = (safeTemp > 0 && safeMax > 0)
-    ? Math.max(0, Math.min(100, Math.round((safeTemp / safeMax) * 100)))
-    : 0;
-
-  hb.innerHTML = `
-    <div class="hp-bar__track">
-      <div class="hp-bar__fill" style="width:${percent}%"></div>
-      ${safeTemp > 0 ? `<div class="hp-bar__temp" style="width:${tempPercent}%"></div>` : ``}
-      <div class="hp-bar__label">${safeCur}/${safeMax}${safeTemp > 0 ? `+${safeTemp}` : ``}</div>
-    </div>
-  `;
-}
-
-function closeTokenQuickPopup() {
-  if (tokenQuickPopupEl) tokenQuickPopupEl.remove();
-  tokenQuickPopupEl = null;
-  tokenQuickPopupForId = null;
-}
-
-function openTokenQuickPopup(playerId) {
-  const p = (players || []).find(pp => String(pp.id) === String(playerId));
-  if (!p) return;
-
-  if (tokenQuickPopupForId && String(tokenQuickPopupForId) === String(playerId) && tokenQuickPopupEl) {
-    closeTokenQuickPopup();
-    return;
-  }
-  closeTokenQuickPopup();
-
-  const tokenEl = playerElements.get(playerId);
-  if (!tokenEl) return;
-
-  const sheet = getSheetSafe(p) || {};
-  const myUid = String(localStorage.getItem('dnd_user_id') || '');
-  const canEdit = isGM() || (String(p.ownerId) === myUid);
-
-  const { max, cur, temp } = getHpFromSheet(sheet);
-  const ac = Number(sheet?.vitality?.ac?.value) || 0;
-  const spd = Number(sheet?.vitality?.speed?.value) || 0;
-  const lvl = Number(sheet?.info?.level?.value) || 1;
-
-  const stats = sheet?.stats || {};
-  const statIds = ["str", "dex", "con", "int", "wis", "cha"];
-  const statLabels = { str: "СИЛ", dex: "ЛОВ", con: "ТЕЛ", int: "ИНТ", wis: "МУД", cha: "ХАР" };
-
-  tokenQuickPopupEl = document.createElement('div');
-  tokenQuickPopupEl.className = 'token-quick-popup';
-  tokenQuickPopupEl.style.position = 'absolute';
-  tokenQuickPopupEl.style.zIndex = '20000';
-
-  const clampInt = (v, lo, hi) => {
-    const n = Math.trunc(Number(v) || 0);
-    return Math.max(lo, Math.min(hi, n));
-  };
-
-  tokenQuickPopupEl.innerHTML = `
-    <div class="tqp-head">
-      <div class="tqp-title">${escapeHtml(String(p.name || "-"))}</div>
-      <button class="tqp-x" type="button" data-tqp-close title="Закрыть">✕</button>
-    </div>
-
-    <div class="tqp-row tqp-row--hp">
-      <div class="tqp-label">HP</div>
-      <input class="tqp-inp" type="number" min="0" max="999" step="1" data-tqp-hp="cur" value="${escapeHtml(String(cur || 0))}" ${canEdit ? "" : "disabled"}>
-      <span class="tqp-slash">/</span>
-      <input class="tqp-inp" type="number" min="0" max="999" step="1" data-tqp-hp="max" value="${escapeHtml(String(max || 0))}" ${canEdit ? "" : "disabled"}>
-      <span class="tqp-temp">+</span>
-      <input class="tqp-inp tqp-inp--temp" type="number" min="0" max="999" step="1" data-tqp-hp="temp" value="${escapeHtml(String(temp || 0))}" ${canEdit ? "" : "disabled"}>
-    </div>
-
-    <div class="tqp-grid3">
-      <div class="tqp-kv"><div class="tqp-k">КЗ</div><div class="tqp-v">${escapeHtml(String(ac))}</div></div>
-      <div class="tqp-kv"><div class="tqp-k">Скор.</div><div class="tqp-v">${escapeHtml(String(spd))}</div></div>
-      <div class="tqp-kv"><div class="tqp-k">Ур.</div><div class="tqp-v">${escapeHtml(String(lvl))}</div></div>
-    </div>
-
-    <div class="tqp-stats">
-      ${statIds.map(k => {
-        const sc = Number(stats?.[k]?.score) || 0;
-        const mod = Number(stats?.[k]?.modifier) || 0;
-        const s = (mod >= 0 ? "+" : "") + String(mod);
-        return `<div class="tqp-stat"><div class="tqp-stat-k">${statLabels[k]}</div><div class="tqp-stat-v">${sc} <span class="tqp-stat-m">${s}</span></div></div>`;
-      }).join("")}
-    </div>
-
-    <button class="tqp-sheet-btn" type="button" data-tqp-open-sheet>Лист персонажа</button>
-  `;
-
-  board.appendChild(tokenQuickPopupEl);
-
-  const place = () => {
-    const left = tokenEl.offsetLeft + (tokenEl.offsetWidth / 2);
-    const top = tokenEl.offsetTop - 8;
-
-    const w = tokenQuickPopupEl.offsetWidth || 240;
-    const h = tokenQuickPopupEl.offsetHeight || 170;
-
-    let x = left - (w / 2);
-    let y = top - h;
-
-    x = Math.max(4, Math.min((board.offsetWidth - w - 4), x));
-    y = Math.max(4, y);
-
-    tokenQuickPopupEl.style.left = `${x}px`;
-    tokenQuickPopupEl.style.top = `${y}px`;
-  };
-
-  place();
-  tokenQuickPopupForId = playerId;
-
-  tokenQuickPopupEl.addEventListener('click', (e) => {
-    const t = e.target;
-    if (t && t.closest && t.closest('[data-tqp-close]')) {
-      closeTokenQuickPopup();
-      return;
-    }
-
-    const openBtn = t && t.closest && t.closest('[data-tqp-open-sheet]');
-    if (openBtn) {
-      try {
-        if (window.InfoModal && typeof window.InfoModal.open === 'function') {
-          window.InfoModal.open(playerId);
-        } else if (typeof window.openCharacterSheet === 'function') {
-          window.openCharacterSheet(playerId);
-        } else {
-          // best-effort: try click existing button if it exists
-          const btn = document.querySelector(`[data-open-sheet-player-id="${CSS.escape(String(playerId))}"]`);
-          btn?.click?.();
-        }
-      } catch (err) {
-        console.warn(err);
-      }
-    }
-  });
-
-  const onOutside = (ev) => {
-    if (!tokenQuickPopupEl) return;
-    if (tokenQuickPopupEl.contains(ev.target)) return;
-    if (tokenEl.contains(ev.target)) return;
-    closeTokenQuickPopup();
-    board.removeEventListener('mousedown', onOutside, true);
-  };
-  board.addEventListener('mousedown', onOutside, true);
-
-  let saveT = null;
-  const scheduleSave = () => {
-    if (!canEdit) return;
-    if (saveT) clearTimeout(saveT);
-    saveT = setTimeout(() => {
-      const live = (players || []).find(pp => String(pp.id) === String(playerId));
-      if (!live?.sheet?.parsed) return;
-
-      const root = tokenQuickPopupEl;
-      const maxEl = root.querySelector('[data-tqp-hp="max"]');
-      const curEl = root.querySelector('[data-tqp-hp="cur"]');
-      const tempEl = root.querySelector('[data-tqp-hp="temp"]');
-
-      const newMax = clampInt(maxEl?.value, 0, 999);
-      const newCur = clampInt(curEl?.value, 0, 999);
-      const newTemp = clampInt(tempEl?.value, 0, 999);
-
-      const sheet2 = live.sheet.parsed;
-      if (!sheet2.vitality) sheet2.vitality = {};
-      if (!sheet2.vitality["hp-max"]) sheet2.vitality["hp-max"] = { value: 0 };
-      if (!sheet2.vitality["hp-current"]) sheet2.vitality["hp-current"] = { value: 0 };
-      if (!sheet2.vitality["hp-temp"]) sheet2.vitality["hp-temp"] = { value: 0 };
-
-      sheet2.vitality["hp-max"].value = newMax;
-      sheet2.vitality["hp-current"].value = Math.max(0, Math.min(newMax, newCur));
-      sheet2.vitality["hp-temp"].value = newTemp;
-
-      sendMessage({ type: 'setPlayerSheet', id: playerId, sheet: live.sheet });
-      updateHpBarForPlayer(live, tokenEl);
-    }, 250);
-  };
-
-  tokenQuickPopupEl.addEventListener('input', (e) => {
-    const el = e.target;
-    if (!el || !el.getAttribute) return;
-    if (!el.getAttribute('data-tqp-hp')) return;
-    scheduleSave();
-  });
-
-  requestAnimationFrame(place);
+  // HP bar + попап позиционируем после установки координат
+  try { updateHpBarForPlayer(player); } catch {}
+  try { positionMiniPopupForPlayer(player); } catch {}
 }
 
 // ================== NO-OVERLAP HELPERS (CLIENT SIDE) ==================
@@ -1603,10 +1612,22 @@ addPlayerBtn.addEventListener('click', () => {
 
   playerNameInput.value = '';
   if (isBaseCheckbox && !isBaseCheckbox.disabled) isBaseCheckbox.checked = false;
-  if (isAllyCheckbox && !isAllyCheckbox.disabled) isAllyCheckbox.checked = false;
+  if (isAllyCheckbox) isAllyCheckbox.checked = false;
 });
 
 // ================== MOVE PLAYER ==================
+// Надёжный обработчик двойного клика по токену (если на отдельных элементах событие не срабатывает)
+board.addEventListener('dblclick', (e) => {
+  const token = e.target?.closest?.('.player');
+  if (!token) return;
+  const pid = token.dataset.playerId;
+  const p = (players || []).find(pp => String(pp.id) === String(pid));
+  if (!p) return;
+  e.preventDefault();
+  e.stopPropagation();
+  openMiniPopup(p);
+}, true);
+
 board.addEventListener('click', e => {
   if (!selectedPlayer) return;
   const cell = e.target.closest('.cell');
@@ -2227,6 +2248,10 @@ createBoardBtn.addEventListener('click', () => {
 resetGameBtn.addEventListener('click', () => {
   playerElements.forEach(el => el.remove());
   playerElements.clear();
+  hpBarElements.forEach((o) => o?.root?.remove?.());
+  hpBarElements.clear();
+  miniPopups.forEach((el) => el?.remove?.());
+  miniPopups.clear();
   sendMessage({ type: 'resetGame' });
 });
 
@@ -3272,7 +3297,6 @@ async function sendMessage(msg) {
           const player = msg.player || {};
           const isBase = !!player.isBase;
           const isMonster = !!player.isMonster;
-          const isAlly = !!player.isAlly;
           if (isBase) {
             const exists = (next.players || []).some(p => p.isBase && p.ownerId === myUserId);
             if (exists) {
@@ -3293,7 +3317,6 @@ async function sendMessage(msg) {
             pendingInitiativeChoice: (next.phase === "combat"),
             willJoinNextRound: false,
             isBase,
-            isAlly,
             isMonster,
             monsterId: player.monsterId || null,
             ownerId: myUserId,
