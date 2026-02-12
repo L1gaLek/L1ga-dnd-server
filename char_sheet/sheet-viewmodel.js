@@ -679,6 +679,11 @@ const weapons = weaponsRaw
   window.getByPath = getByPath;
   window.setByPath = setByPath;
 
+  // Expose proficiency bonus helper (backward-compat)
+  CS.utils.getProfBonus = getProfBonus;
+  window.getProfBonus = getProfBonus;
+
+
   CS.utils.scoreToModifier = scoreToModifier;
   CS.utils.abilityModFromScore = abilityModFromScore;
   CS.utils.parseModInput = parseModInput;
