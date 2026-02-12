@@ -1642,4 +1642,15 @@ function renderCombatTab(vm) {
   CS.spells.bindSlotEditors = bindSlotEditors;
   CS.spells.bindSpellAddAndDesc = bindSpellAddAndDesc;
 
+
+  // Expose tab renderers for other modules (backward-compat)
+  const CSX = window.CharSheet = window.CharSheet || {};
+  CSX.tabs = CSX.tabs || {};
+  CSX.tabs.renderBasicTab = renderBasicTab;
+  window.renderBasicTab = renderBasicTab;
+  CSX.tabs.renderSpellsTab = renderSpellsTab;
+  window.renderSpellsTab = renderSpellsTab;
+  CSX.tabs.renderCombatTab = renderCombatTab;
+  window.renderCombatTab = renderCombatTab;
+
 })();
