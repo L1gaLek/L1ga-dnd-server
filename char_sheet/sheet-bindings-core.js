@@ -51,7 +51,7 @@
     const activeTab = player._activeSheetTab || st.activeTab || "basic";
     st.activeTab = activeTab;
 
-    const main = sheetContent?.querySelector?.("#sheet-main");
+    const main = CS.dom?.sheetContent?.querySelector?.("#sheet-main");
     if (main) {
       st.scrollTopByTab[activeTab] = main.scrollTop || 0;
     }
@@ -61,7 +61,7 @@
     if (!player?.id) return;
     const st = getUiState(player.id);
     const activeTab = player._activeSheetTab || st.activeTab || "basic";
-    const main = sheetContent?.querySelector?.("#sheet-main");
+    const main = CS.dom?.sheetContent?.querySelector?.("#sheet-main");
     if (main && st.scrollTopByTab && typeof st.scrollTopByTab[activeTab] === "number") {
       main.scrollTop = st.scrollTopByTab[activeTab];
     }
@@ -74,6 +74,7 @@
   }
 
   function isModalBusy(playerId) {
+    const sheetModal = CS.dom?.sheetModal;
     if (!sheetModal || sheetModal.classList.contains('hidden')) return false;
     const activeEl = document.activeElement;
     if (activeEl && sheetModal.contains(activeEl)) return true;
