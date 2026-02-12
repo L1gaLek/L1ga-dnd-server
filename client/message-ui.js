@@ -1,6 +1,42 @@
 // ================== MESSAGE HANDLER (used by Supabase subscriptions) ==================
 function handleMessage(msg) {
 
+  // ================== VISIBILITY HELPERS ==================
+  // Rules requested:
+  // 1) "Союзник" is GM-only.
+  // 2) GM-created characters are hidden from other players unless isAlly.
+  // 3) HP-bar / double-click mini / sheet are only available for visible tokens.
+  // 4) GM-created non-base non-ally characters are scoped to the active map (mapId).
+  function getOwnerRoleForPlayer(p) {
+    const direct = String(p?.ownerRole || '').trim();
+    if (direct) return direct;
+    const u = p?.ownerId ? usersById.get(String(p.ownerId)) : null;
+    return String(u?.role || '').trim();
+  }
+
+  function isPlayerVisibleToMe(p, state) {
+    if (!p) return false;
+    const ownerRole = getOwnerRoleForPlayer(p);
+    const curMapId = String(state?.currentMapId || '').trim();
+
+    if (myRole === 'GM') {
+      // Map-local GM NPCs/monsters: show only on their map.
+      if (ownerRole === 'GM' && !p.isBase && !p.isAlly) {
+        const pidMap = String(p?.mapId || '').trim();
+        if (pidMap && curMapId && pidMap !== curMapId) return false;
+      }
+      return true;
+    }
+
+    // Non-GM: hide GM-created unless ally.
+    if (ownerRole === 'GM' && !p.isAlly) return false;
+
+    // Safety: if a GM-created map-local somehow leaked as visible, still gate by map.
+    const pidMap = String(p?.mapId || '').trim();
+    if (ownerRole === 'GM' && pidMap && curMapId && pidMap !== curMapId && !p.isAlly) return false;
+    return true;
+  }
+
 // ===== Rooms lobby messages =====
 if (msg.type === 'rooms' && Array.isArray(msg.rooms)) {
   renderRooms(msg.rooms);
@@ -154,8 +190,12 @@ loginDiv.style.display = 'none';
       // обновим GM-инпуты (если controlbox подключен)
       try { window.ControlBox?.refreshGmInputsFromState?.(); } catch {}
 
-      // Удаляем DOM-элементы игроков, которых больше нет в состоянии
-      const existingIds = new Set((normalized.players || []).map(p => p.id));
+      // Apply visibility rules (GM-only ally, GM NPC visibility, per-map list scoping)
+      const allPlayers = Array.isArray(normalized.players) ? normalized.players : [];
+      const visiblePlayers = allPlayers.filter(p => isPlayerVisibleToMe(p, normalized));
+
+      // Удаляем DOM-элементы игроков, которых больше нет (или скрыты правилами видимости)
+      const existingIds = new Set(visiblePlayers.map(p => p.id));
       playerElements.forEach((el, id) => {
         if (!existingIds.has(id)) {
           el.remove();
@@ -170,7 +210,7 @@ loginDiv.style.display = 'none';
         }
       });
 
-      players = normalized.players || [];
+      players = visiblePlayers;
 
       // Основа одна на пользователя — блокируем чекбокс
       if (isBaseCheckbox) {
@@ -316,7 +356,8 @@ function renderTurnOrderBox(state) {
   const round = Number(state?.round) || 1;
   if (turnOrderRound) turnOrderRound.textContent = String(round);
 
-  const stPlayers = Array.isArray(state?.players) ? state.players : [];
+  // Use already-filtered players[] so hidden GM NPCs do not appear for other users.
+  const stPlayers = Array.isArray(players) ? players : (Array.isArray(state?.players) ? state.players : []);
 
   let ordered = [];
   if (phase === "combat" && Array.isArray(state?.turnOrder) && state.turnOrder.length) {

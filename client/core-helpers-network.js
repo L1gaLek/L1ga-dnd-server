@@ -867,6 +867,16 @@ async function sendMessage(msg) {
           const player = msg.player || {};
           const isBase = !!player.isBase;
           const isMonster = !!player.isMonster;
+
+          // Visibility + per-map scoping metadata:
+          // - ownerRole allows clients to hide GM-created non-allies from other players.
+          // - mapId allows GM to keep "map-local" NPCs/monsters per active map.
+          //   Bases and Allies are global across maps.
+          const ownerRole = String(myRole || "").trim() || "";
+          const activeMapId = String(next?.currentMapId || "").trim() || null;
+          const mapId = (ownerRole === "GM" && !isBase && !player.isAlly)
+            ? (activeMapId || null)
+            : null;
           if (isBase) {
             const exists = (next.players || []).some(p => p.isBase && p.ownerId === myUserId);
             if (exists) {
@@ -891,6 +901,8 @@ async function sendMessage(msg) {
             isMonster,
             monsterId: player.monsterId || null,
             ownerId: myUserId,
+            ownerRole,
+            mapId,
             ownerName: myNameSpan?.textContent || "",
             sheet: player.sheet || { parsed: { name: { value: player.name } } }
           });
