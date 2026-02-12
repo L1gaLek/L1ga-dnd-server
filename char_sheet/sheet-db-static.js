@@ -378,18 +378,23 @@ function bindLanguagesUi(root, player, canEdit) {
 
   function showCondPopup() { ensureCondPopup().classList.remove("hidden"); }
   function hideCondPopup() { condPopupEl?.classList.add("hidden"); }
-function ensureWiredCloseHandlers() {
-    sheetClose?.addEventListener('click', closeModal);
+  function ensureWiredCloseHandlers() {
+    const sheetClose = CS.dom?.sheetClose;
+    const sheetModal = CS.dom?.sheetModal;
+    const sheetContent = CS.dom?.sheetContent;
+    const close = () => CS.modal?.closeModal?.();
+
+    sheetClose?.addEventListener('click', close);
 
     // клик по фону закрывает
     sheetModal?.addEventListener('click', (e) => {
-      if (e.target === sheetModal) closeModal();
+      if (e.target === sheetModal) close();
     });
 
     // ESC закрывает
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && sheetModal && !sheetModal.classList.contains('hidden')) {
-        closeModal();
+        close();
       }
     });
 
@@ -398,7 +403,7 @@ function ensureWiredCloseHandlers() {
       const t = e.target;
       if (!(t instanceof Element)) return;
       const chip = t.closest('[data-hp-open]');
-      if (chip) showHpPopup();
+      if (chip) CS.modal?.showHpPopup?.();
     });
 
     sheetContent?.addEventListener('keydown', (e) => {
@@ -408,7 +413,7 @@ function ensureWiredCloseHandlers() {
       if (!chip) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        showHpPopup();
+        CS.modal?.showHpPopup?.();
       }
     });
 
@@ -495,5 +500,10 @@ function ensureWiredCloseHandlers() {
   CS.db.bindLanguagesUi = bindLanguagesUi;
   // Используется из sheet-modal.js
   CS.db.ensureWiredCloseHandlers = ensureWiredCloseHandlers;
+  // Используется из sheet-modal.js для закрытия
+  CS.db.hideExhPopup = hideExhPopup;
+  CS.db.hideCondPopup = hideCondPopup;
+  CS.db.showExhPopup = showExhPopup;
+  CS.db.showCondPopup = showCondPopup;
 
 })();
