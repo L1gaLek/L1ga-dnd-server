@@ -533,4 +533,18 @@ if (path === "proficiency" || path === "proficiencyCustom") {
   CS.bindings.scheduleSheetSave = scheduleSheetSave;
   CS.bindings.bindEditableInputs = bindEditableInputs;
 
+
+  // Expose bindings helpers for other modules (backward-compat)
+  CS.bindings = CS.bindings || {};
+  CS.bindings.captureUiStateFromDom = captureUiStateFromDom;
+  CS.bindings.restoreUiStateToDom = restoreUiStateToDom;
+  CS.bindings.isModalBusy = isModalBusy;
+  CS.bindings.markModalInteracted = markModalInteracted;
+
+  // Some modules still reference these as globals
+  window.captureUiStateFromDom = captureUiStateFromDom;
+  window.restoreUiStateToDom = restoreUiStateToDom;
+  window.isModalBusy = isModalBusy;
+  window.markModalInteracted = markModalInteracted;
+
 })();
