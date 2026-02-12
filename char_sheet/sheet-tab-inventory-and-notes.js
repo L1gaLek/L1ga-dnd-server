@@ -364,4 +364,13 @@
   CS.tabs.renderInventoryTab = renderInventoryTab;
   CS.tabs.renderNotesTab = renderNotesTab;
 
+
+  // Expose tab renderers for other modules (backward-compat)
+  const CSX = window.CharSheet = window.CharSheet || {};
+  CSX.tabs = CSX.tabs || {};
+  CSX.tabs.renderInventoryTab = renderInventoryTab;
+  window.renderInventoryTab = renderInventoryTab;
+  CSX.tabs.renderNotesTab = renderNotesTab;
+  window.renderNotesTab = renderNotesTab;
+
 })();
