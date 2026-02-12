@@ -524,253 +524,7 @@ let wallMode = null;
 let mouseDown = false;
 
 const playerElements = new Map();
-// HP bars над токенами (всегда на переднем плане)
-const hpBarElements = new Map(); // playerId -> { root, fill, text }
-// Мини-окошко (двойной клик по токену)
-const miniPopups = new Map(); // playerId -> element
-
-function _num(v, fallback = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function getPlayerVitals(p) {
-  const sheet = p?.sheet || {};
-  const vit = sheet.vitality || sheet?.parsed?.vitality || {};
-  const hpMax = _num(vit?.["hp-max"]?.value ?? vit?.hpMax?.value ?? vit?.hp?.max ?? vit?.hp_max ?? 0, 0);
-  const hpCur = _num(vit?.["hp-current"]?.value ?? vit?.hpCur?.value ?? vit?.hp?.current ?? vit?.hp_current ?? 0, 0);
-  const hpTemp = _num(vit?.["hp-temp"]?.value ?? vit?.hpTemp?.value ?? vit?.hp?.temp ?? vit?.hp_temp ?? 0, 0);
-  const ac = _num(vit?.ac?.value ?? sheet?.parsed?.vitality?.ac?.value ?? 0, 0);
-  const spd = _num(vit?.speed?.value ?? sheet?.parsed?.vitality?.speed?.value ?? 0, 0);
-  // уровень чаще всего в sheet.parsed.profile.level.value
-  const lvl = _num(sheet?.parsed?.profile?.level?.value ?? sheet?.parsed?.level?.value ?? sheet?.parsed?.lvl ?? 0, 0);
-  const stats = sheet?.parsed?.stats || {};
-  return {
-    hpMax,
-    hpCur,
-    hpTemp,
-    ac,
-    spd,
-    lvl,
-    stats
-  };
-}
-
-function ensureHpBar(player) {
-  const id = player.id;
-  let obj = hpBarElements.get(id);
-  if (obj) return obj;
-
-  const root = document.createElement('div');
-  root.className = 'hpbar';
-  root.innerHTML = `
-    <div class="hpbar__track">
-      <div class="hpbar__fill" aria-hidden="true"></div>
-      <div class="hpbar__text"></div>
-    </div>
-  `;
-  board.appendChild(root);
-  obj = {
-    root,
-    fill: root.querySelector('.hpbar__fill'),
-    text: root.querySelector('.hpbar__text')
-  };
-  hpBarElements.set(id, obj);
-  return obj;
-}
-
-function removeHpBar(playerId) {
-  const obj = hpBarElements.get(playerId);
-  if (obj?.root) obj.root.remove();
-  hpBarElements.delete(playerId);
-}
-
-function closeMiniPopup(playerId) {
-  const el = miniPopups.get(playerId);
-  if (el) el.remove();
-  miniPopups.delete(playerId);
-}
-
-function positionMiniPopupForPlayer(player) {
-  const pop = miniPopups.get(player.id);
-  const el = playerElements.get(player.id);
-  if (!pop || !el) return;
-  if (player.x === null || player.y === null) {
-    pop.style.display = 'none';
-    return;
-  }
-  pop.style.display = 'block';
-  const rect = el.getBoundingClientRect();
-  const boardRect = board.getBoundingClientRect();
-  // позиционируем над токеном с небольшим отступом
-  const left = rect.left - boardRect.left + rect.width / 2;
-  const top = rect.top - boardRect.top - 8;
-  pop.style.left = `${left}px`;
-  pop.style.top = `${top}px`;
-}
-
-function openMiniPopup(player) {
-  // toggle
-  if (miniPopups.has(player.id)) {
-    closeMiniPopup(player.id);
-    return;
-  }
-
-  // закрываем остальные
-  Array.from(miniPopups.keys()).forEach((id) => closeMiniPopup(id));
-
-  const pop = document.createElement('div');
-  pop.className = 'token-popup';
-  pop.setAttribute('data-player-id', String(player.id));
-  pop.innerHTML = `
-    <div class="token-popup__panel">
-      <div class="token-popup__title"></div>
-      <div class="token-popup__grid">
-        <label class="tp-row">
-          <span>HP</span>
-          <input type="number" class="tp-input" data-tp="hpCur" min="0" step="1">
-          <span class="tp-sep">/</span>
-          <input type="number" class="tp-input" data-tp="hpMax" min="0" step="1">
-        </label>
-        <div class="tp-row">
-          <span>КЗ</span>
-          <div class="tp-val" data-tp="ac">-</div>
-          <span>Скор.</span>
-          <div class="tp-val" data-tp="spd">-</div>
-        </div>
-        <div class="tp-row">
-          <span>Уров.</span>
-          <div class="tp-val" data-tp="lvl">-</div>
-        </div>
-        <div class="tp-stats" data-tp="stats"></div>
-      </div>
-      <div class="token-popup__actions">
-        <button type="button" class="tp-btn" data-tp-open-sheet>Лист персонажа</button>
-      </div>
-    </div>
-  `;
-
-  // чтобы центрировать по токену
-  pop.style.position = 'absolute';
-  pop.style.transform = 'translate(-50%, -100%)';
-  board.appendChild(pop);
-  miniPopups.set(player.id, pop);
-
-  const title = pop.querySelector('.token-popup__title');
-  if (title) title.textContent = player.name || 'Персонаж';
-
-  const applyToUi = () => {
-    const v = getPlayerVitals(player);
-    const hpCurEl = pop.querySelector('[data-tp="hpCur"]');
-    const hpMaxEl = pop.querySelector('[data-tp="hpMax"]');
-    if (hpCurEl) hpCurEl.value = String(v.hpCur);
-    if (hpMaxEl) hpMaxEl.value = String(v.hpMax);
-    const acEl = pop.querySelector('[data-tp="ac"]');
-    const spdEl = pop.querySelector('[data-tp="spd"]');
-    const lvlEl = pop.querySelector('[data-tp="lvl"]');
-    if (acEl) acEl.textContent = v.ac ? String(v.ac) : '-';
-    if (spdEl) spdEl.textContent = v.spd ? String(v.spd) : '-';
-    if (lvlEl) lvlEl.textContent = v.lvl ? String(v.lvl) : '-';
-
-    const statsBox = pop.querySelector('[data-tp="stats"]');
-    if (statsBox) {
-      const s = v.stats || {};
-      const mk = (k, label) => {
-        const val = _num(s?.[k]?.value ?? s?.[k] ?? '-', '-');
-        return `<div class="tp-stat"><span class="k">${label}</span><span class="v">${val}</span></div>`;
-      };
-      statsBox.innerHTML = [
-        mk('str', 'СИЛ'),
-        mk('dex', 'ЛОВ'),
-        mk('con', 'ТЕЛ'),
-        mk('int', 'ИНТ'),
-        mk('wis', 'МДР'),
-        mk('cha', 'ХАР'),
-      ].join('');
-    }
-  };
-
-  applyToUi();
-  positionMiniPopupForPlayer(player);
-
-  // действия
-  pop.addEventListener('click', (e) => {
-    const t = e.target;
-    if (t?.closest?.('[data-tp-open-sheet]')) {
-      e.stopPropagation();
-      window.InfoModal?.open?.(player);
-      return;
-    }
-  });
-
-  // HP редактирование — сохраняем как в листе персонажа
-  const saveHp = () => {
-    const sheet = player.sheet;
-    if (!sheet) return;
-    if (!sheet.vitality) sheet.vitality = {};
-    if (!sheet.vitality["hp-max"]) sheet.vitality["hp-max"] = { value: 0 };
-    if (!sheet.vitality["hp-current"]) sheet.vitality["hp-current"] = { value: 0 };
-    const hpCurEl = pop.querySelector('[data-tp="hpCur"]');
-    const hpMaxEl = pop.querySelector('[data-tp="hpMax"]');
-    const max = Math.max(0, _num(hpMaxEl?.value, 0));
-    const cur = Math.max(0, Math.min(max, _num(hpCurEl?.value, 0)));
-    sheet.vitality["hp-max"].value = max;
-    sheet.vitality["hp-current"].value = cur;
-    sendMessage({ type: 'setPlayerSheet', id: player.id, sheet });
-  };
-
-  pop.addEventListener('change', (e) => {
-    const el = e.target;
-    if (!(el instanceof HTMLInputElement)) return;
-    if (el.getAttribute('data-tp') === 'hpCur' || el.getAttribute('data-tp') === 'hpMax') {
-      saveHp();
-    }
-  });
-
-  // закрытие по клику вне
-  const onDocDown = (e) => {
-    if (!miniPopups.has(player.id)) {
-      document.removeEventListener('mousedown', onDocDown, true);
-      return;
-    }
-    if (e.target && pop.contains(e.target)) return;
-    closeMiniPopup(player.id);
-    document.removeEventListener('mousedown', onDocDown, true);
-  };
-  document.addEventListener('mousedown', onDocDown, true);
-}
-
-function updateHpBarForPlayer(player) {
-  const tokenEl = playerElements.get(player.id);
-  if (!tokenEl) return;
-
-  const v = getPlayerVitals(player);
-  const bar = ensureHpBar(player);
-
-  // если игрок не на поле — скрываем
-  if (player.x === null || player.y === null) {
-    bar.root.style.display = 'none';
-    return;
-  }
-  bar.root.style.display = 'block';
-
-  const max = Math.max(0, v.hpMax);
-  const cur = Math.max(0, v.hpCur);
-  const temp = Math.max(0, v.hpTemp);
-  const denom = Math.max(1, max);
-  const pct = Math.max(0, Math.min(100, Math.round((cur / denom) * 100)));
-  bar.fill.style.width = `${pct}%`;
-  bar.text.textContent = temp > 0 ? `(${temp}) ${cur}/${max}` : `${cur}/${max}`;
-
-  // позиционируем над токеном
-  const left = tokenEl.offsetLeft;
-  const top = tokenEl.offsetTop;
-  const w = tokenEl.offsetWidth;
-  bar.root.style.left = `${left}px`;
-  bar.root.style.top = `${Math.max(0, top - 16)}px`;
-  bar.root.style.width = `${w}px`;
-}
-
+const hpBarElements = new Map(); // playerId -> hp bar element (absolute on board)
 let finishInitiativeSent = false;
 
 // users map (ownerId -> {name, role}) — только подключённые сейчас
@@ -987,9 +741,13 @@ loginDiv.style.display = 'none';
         if (!existingIds.has(id)) {
           el.remove();
           playerElements.delete(id);
-          // чистим хвосты: HP бар и мини-попап
-          try { removeHpBar(id); } catch {}
-          try { closeMiniPopup(id); } catch {}
+        }
+      });
+
+      hpBarElements.forEach((el, id) => {
+        if (!existingIds.has(id)) {
+          el.remove();
+          hpBarElements.delete(id);
         }
       });
 
@@ -1331,6 +1089,13 @@ function updatePlayerList() {
         nameWrap.appendChild(baseBadge);
       }
 
+      if (p.isAlly) {
+        const allyBadge = document.createElement('span');
+        allyBadge.className = 'ally-badge';
+        allyBadge.textContent = 'союзник';
+        nameWrap.appendChild(allyBadge);
+      }
+
       li.appendChild(nameWrap);
 
       const actions = document.createElement('div');
@@ -1495,6 +1260,234 @@ function renderBoard(state) {
   players.forEach(p => setPlayerPosition(p));
 }
 
+// ================== SHEET HELPERS (for HP bar + mini popup) ==================
+function getFrom(obj, path, fallback) {
+  try {
+    const parts = String(path || '').split('.').filter(Boolean);
+    let cur = obj;
+    for (const k of parts) {
+      if (!cur || typeof cur !== 'object') return fallback;
+      cur = cur[k];
+    }
+    return (cur === undefined ? fallback : cur);
+  } catch {
+    return fallback;
+  }
+}
+
+function safeNum(v, fallback = null) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function getQuickSheetStats(player) {
+  const s = player?.sheet?.parsed || {};
+  const hpMax = safeNum(getFrom(s, 'vitality.hp-max.value', null), null);
+  const hpCur = safeNum(getFrom(s, 'vitality.hp-current.value', null), null);
+  const ac = safeNum(getFrom(s, 'vitality.ac.value', null), null);
+  const speed = safeNum(getFrom(s, 'vitality.speed.value', null), null);
+  const lvl = safeNum(getFrom(s, 'info.level.value', null), null);
+  const stats = {
+    str: safeNum(getFrom(s, 'stats.str.score', null), null),
+    dex: safeNum(getFrom(s, 'stats.dex.score', null), null),
+    con: safeNum(getFrom(s, 'stats.con.score', null), null),
+    int: safeNum(getFrom(s, 'stats.int.score', null), null),
+    wis: safeNum(getFrom(s, 'stats.wis.score', null), null),
+    cha: safeNum(getFrom(s, 'stats.cha.score', null), null)
+  };
+  return { hpMax, hpCur, ac, speed, lvl, stats };
+}
+
+function ensureSheetPath(sheetObj, path) {
+  const parts = String(path || '').split('.').filter(Boolean);
+  let cur = sheetObj;
+  for (let i = 0; i < parts.length; i++) {
+    const k = parts[i];
+    if (i === parts.length - 1) return { parent: cur, key: k };
+    if (!cur[k] || typeof cur[k] !== 'object') cur[k] = {};
+    cur = cur[k];
+  }
+  return { parent: sheetObj, key: null };
+}
+
+function upsertSheetNumber(player, path, value) {
+  const pid = String(player?.id || '');
+  if (!pid) return;
+  const current = players.find(p => String(p?.id) === pid);
+  if (!current) return;
+  const nextSheet = deepClone(current.sheet || { parsed: {} });
+  if (!nextSheet.parsed || typeof nextSheet.parsed !== 'object') nextSheet.parsed = {};
+  const { parent, key } = ensureSheetPath(nextSheet.parsed, path);
+  if (!parent || !key) return;
+  if (!parent[key] || typeof parent[key] !== 'object') parent[key] = {};
+  parent[key].value = value;
+  // оптимистично обновляем локально
+  current.sheet = nextSheet;
+  sendMessage({ type: 'setPlayerSheet', id: pid, sheet: nextSheet });
+}
+
+// ================== HP BAR (always on top) ==================
+function updateHpBar(player, tokenEl) {
+  const pid = String(player?.id || '');
+  if (!pid) return;
+  let bar = hpBarElements.get(pid);
+
+  const size = Number(player?.size) || 1;
+
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'token-hpbar';
+    bar.innerHTML = `<div class="fill"></div><div class="txt"></div>`;
+    board.appendChild(bar);
+    hpBarElements.set(pid, bar);
+  }
+
+  if (!tokenEl || tokenEl.style.display === 'none' || player.x === null || player.y === null) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  const { hpMax, hpCur } = getQuickSheetStats(player);
+  const max = (hpMax !== null ? Math.max(0, hpMax) : 0);
+  const cur = (hpCur !== null ? hpCur : max);
+  const pct = max > 0 ? Math.max(0, Math.min(100, Math.round((cur / max) * 100))) : 0;
+
+  bar.style.display = 'block';
+  bar.style.width = `${size * 50}px`;
+  bar.style.left = `${tokenEl.offsetLeft}px`;
+  bar.style.top = `${tokenEl.offsetTop - 14}px`;
+
+  const fill = bar.querySelector('.fill');
+  const txt = bar.querySelector('.txt');
+  if (fill) fill.style.width = `${pct}%`;
+  if (txt) txt.textContent = `${cur ?? 0}/${max ?? 0}`;
+}
+
+// ================== MINI POPUP (dblclick on token) ==================
+let tokenMiniEl = null;
+let tokenMiniPlayerId = null;
+
+function closeTokenMini() {
+  if (tokenMiniEl) {
+    tokenMiniEl.remove();
+    tokenMiniEl = null;
+    tokenMiniPlayerId = null;
+  }
+}
+
+function formatVal(v, fallback = '—') {
+  return (v === null || v === undefined || v === '' || (typeof v === 'number' && !Number.isFinite(v))) ? fallback : String(v);
+}
+
+function positionTokenMini(tokenEl) {
+  if (!tokenMiniEl || !tokenEl) return;
+  // ставим примерно над токеном, по центру
+  const left = tokenEl.offsetLeft + (tokenEl.offsetWidth / 2);
+  const top = tokenEl.offsetTop - 8;
+  tokenMiniEl.style.left = `${left}px`;
+  tokenMiniEl.style.top = `${top}px`;
+  tokenMiniEl.style.transform = 'translate(-50%, -100%)';
+
+  // держим в пределах поля (по возможности)
+  const b = board.getBoundingClientRect();
+  const r = tokenMiniEl.getBoundingClientRect();
+  let dx = 0;
+  let dy = 0;
+  if (r.left < b.left) dx = b.left - r.left + 6;
+  if (r.right > b.right) dx = -(r.right - b.right + 6);
+  if (r.top < b.top) dy = b.top - r.top + 6;
+  if (dx || dy) {
+    const curLeft = Number(tokenMiniEl.style.left.replace('px','')) || left;
+    const curTop = Number(tokenMiniEl.style.top.replace('px','')) || top;
+    tokenMiniEl.style.left = `${curLeft + dx}px`;
+    tokenMiniEl.style.top = `${curTop + dy}px`;
+  }
+}
+
+function openTokenMini(playerId) {
+  const p = players.find(pp => String(pp?.id) === String(playerId));
+  if (!p) return;
+  const tokenEl = playerElements.get(p.id);
+  if (!tokenEl || tokenEl.style.display === 'none') return;
+
+  // toggle
+  if (tokenMiniEl && tokenMiniPlayerId === p.id) {
+    closeTokenMini();
+    return;
+  }
+  closeTokenMini();
+
+  const q = getQuickSheetStats(p);
+  const maxHp = (q.hpMax !== null ? q.hpMax : 0);
+  const curHp = (q.hpCur !== null ? q.hpCur : maxHp);
+
+  const card = document.createElement('div');
+  card.className = 'token-mini';
+  card.innerHTML = `
+    <div class="title">${String(p.name || 'Персонаж')}</div>
+    <div class="row">
+      <div style="opacity:.85; font-size:12px;">Здоровье</div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <input type="number" class="hp-cur" min="0" max="999" value="${formatVal(curHp, 0)}" />
+        <div style="opacity:.8;">/</div>
+        <input type="number" class="hp-max" min="0" max="999" value="${formatVal(maxHp, 0)}" />
+      </div>
+    </div>
+    <div class="kv">
+      <div class="k">КД</div><div class="v">${formatVal(q.ac)}</div>
+      <div class="k">Скорость</div><div class="v">${formatVal(q.speed)}</div>
+      <div class="k">Уровень</div><div class="v">${formatVal(q.lvl)}</div>
+      <div class="k">СИЛ</div><div class="v">${formatVal(q.stats.str)}</div>
+      <div class="k">ЛОВ</div><div class="v">${formatVal(q.stats.dex)}</div>
+      <div class="k">ТЕЛ</div><div class="v">${formatVal(q.stats.con)}</div>
+      <div class="k">ИНТ</div><div class="v">${formatVal(q.stats.int)}</div>
+      <div class="k">МУД</div><div class="v">${formatVal(q.stats.wis)}</div>
+      <div class="k">ХАР</div><div class="v">${formatVal(q.stats.cha)}</div>
+    </div>
+    <button class="btn" type="button">Лист персонажа</button>
+  `;
+
+  // prevent board clicks
+  card.addEventListener('mousedown', (e) => e.stopPropagation());
+  card.addEventListener('click', (e) => e.stopPropagation());
+
+  const hpCurInput = card.querySelector('.hp-cur');
+  const hpMaxInput = card.querySelector('.hp-max');
+  const sheetBtn = card.querySelector('.btn');
+
+  const applyHp = () => {
+    const cur = safeNum(hpCurInput?.value, 0) ?? 0;
+    const max = safeNum(hpMaxInput?.value, 0) ?? 0;
+    upsertSheetNumber(p, 'vitality.hp-max', Math.max(0, max));
+    upsertSheetNumber(p, 'vitality.hp-current', Math.max(0, Math.min(Math.max(0, max), cur)));
+    // сразу обновим полоску
+    updateHpBar(p, tokenEl);
+  };
+
+  hpCurInput?.addEventListener('change', applyHp);
+  hpMaxInput?.addEventListener('change', applyHp);
+
+  sheetBtn?.addEventListener('click', () => {
+    window.InfoModal?.open?.(p);
+  });
+
+  board.appendChild(card);
+  tokenMiniEl = card;
+  tokenMiniPlayerId = p.id;
+  // position after append (so size is known)
+  positionTokenMini(tokenEl);
+}
+
+// close mini on outside click / Esc
+document.addEventListener('mousedown', (e) => {
+  if (!tokenMiniEl) return;
+  if (e.target && tokenMiniEl.contains(e.target)) return;
+  closeTokenMini();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeTokenMini();
+});
+
 // ================== PLAYER POSITION ==================
 function setPlayerPosition(player) {
   let el = playerElements.get(player.id);
@@ -1503,7 +1496,6 @@ function setPlayerPosition(player) {
     el = document.createElement('div');
     el.classList.add('player');
     el.textContent = player.name?.[0] || '?';
-    el.dataset.playerId = String(player.id);
     el.style.backgroundColor = player.color;
     el.style.position = 'absolute';
 
@@ -1518,18 +1510,10 @@ function setPlayerPosition(player) {
       }
     });
 
-    // Двойной клик по токену: мини-окошко (иногда dblclick "съедается", поэтому добавляем fallback)
-    el.addEventListener('dblclick', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      openMiniPopup(player);
-    });
-    el.addEventListener('click', (ev) => {
-      if (ev.detail === 2) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        openMiniPopup(player);
-      }
+    // двойной клик — мини-окно со статами
+    el.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      openTokenMini(player.id);
     });
 
     board.appendChild(el);
@@ -1538,16 +1522,13 @@ function setPlayerPosition(player) {
   }
 
   el.textContent = player.name ? player.name[0] : '?';
-  el.dataset.playerId = String(player.id);
   el.style.backgroundColor = player.color;
   el.style.width = `${player.size * 50}px`;
   el.style.height = `${player.size * 50}px`;
 
   if (player.x === null || player.y === null) {
     el.style.display = 'none';
-    // скрываем HP bar / pop-up
-    try { updateHpBarForPlayer(player); } catch {}
-    try { positionMiniPopupForPlayer(player); } catch {}
+    updateHpBar(player, el);
     return;
   }
   el.style.display = 'flex';
@@ -1563,9 +1544,10 @@ function setPlayerPosition(player) {
     el.style.top = `${cell.offsetTop}px`;
   }
 
-  // HP bar + попап позиционируем после установки координат
-  try { updateHpBarForPlayer(player); } catch {}
-  try { positionMiniPopupForPlayer(player); } catch {}
+  updateHpBar(player, el);
+  if (tokenMiniEl && tokenMiniPlayerId === player.id) {
+    positionTokenMini(el);
+  }
 }
 
 // ================== NO-OVERLAP HELPERS (CLIENT SIDE) ==================
@@ -1616,18 +1598,6 @@ addPlayerBtn.addEventListener('click', () => {
 });
 
 // ================== MOVE PLAYER ==================
-// Надёжный обработчик двойного клика по токену (если на отдельных элементах событие не срабатывает)
-board.addEventListener('dblclick', (e) => {
-  const token = e.target?.closest?.('.player');
-  if (!token) return;
-  const pid = token.dataset.playerId;
-  const p = (players || []).find(pp => String(pp.id) === String(pid));
-  if (!p) return;
-  e.preventDefault();
-  e.stopPropagation();
-  openMiniPopup(p);
-}, true);
-
 board.addEventListener('click', e => {
   if (!selectedPlayer) return;
   const cell = e.target.closest('.cell');
@@ -2248,10 +2218,6 @@ createBoardBtn.addEventListener('click', () => {
 resetGameBtn.addEventListener('click', () => {
   playerElements.forEach(el => el.remove());
   playerElements.clear();
-  hpBarElements.forEach((o) => o?.root?.remove?.());
-  hpBarElements.clear();
-  miniPopups.forEach((el) => el?.remove?.());
-  miniPopups.clear();
   sendMessage({ type: 'resetGame' });
 });
 
@@ -3317,6 +3283,7 @@ async function sendMessage(msg) {
             pendingInitiativeChoice: (next.phase === "combat"),
             willJoinNextRound: false,
             isBase,
+            isAlly: !!player.isAlly,
             isMonster,
             monsterId: player.monsterId || null,
             ownerId: myUserId,
