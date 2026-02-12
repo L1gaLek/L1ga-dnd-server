@@ -15,6 +15,7 @@ body {
   /* единая геометрия левой колонки */
   --left-gap: 16px;
   --pm-w: 240px;   /* "Управление игроками" */
+  /* чуть уже, чтобы карточки игроков визуально были подогнаны под кнопки */
   --pl-w: 282px;   /* "Пользователи и персонажи" + "Очередность хода" */
   --dice-w: var(--pm-w);
 }
@@ -93,8 +94,8 @@ body {
 }
 
 /* строка: цвет + размер */
-.pm-row{ display:flex; align-items:center; gap: 6px; }
-.pm-row--size{ justify-content: flex-start; }
+.pm-row{ display:flex; align-items:center; gap: 10px; }
+.pm-row--size{ justify-content: space-between; }
 
 #player-management #player-color{
   padding: 0;
@@ -105,7 +106,7 @@ body {
 .pm-size{
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -115,31 +116,25 @@ body {
   width: 88px;
 }
 
-/* чекбоксы "Основа" + "Союзник" в одну строку */
-.pm-types-row{
+/* строка: "Основа" + "Добавить" */
+.pm-row--bottom{ justify-content: space-between; align-items: stretch; }
+
+/* две галочки в колонке */
+.pm-types{
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.pm-types-row .type-item{
-  display: inline-flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  min-width: 0;
+}
+
+#player-management #add-player{
   white-space: nowrap;
+  padding: 6px 10px;
+  height: 100%;              /* по высоте = две галочки */
+  min-width: 104px;
+  max-width: 120px;
+  width: 120px;
 }
-
-/* Кнопка "Добавить" под чекбоксами, на всю ширину, компактнее */
-#player-management #add-player.pm-add-btn{
-  width: 100%;
-  padding: 4px 10px;
-  height: 28px;
-  line-height: 18px;
-}
-
-#player-management #add-player.pm-add-btn{ white-space: nowrap; }
 
 #action-log h3,
 #player-management h3,
@@ -332,6 +327,187 @@ outline-color: #666;
   border: 2px solid #888;
   box-sizing: border-box;
   z-index: 2;
+}
+
+/* ===== HP bar над токеном (всегда на переднем плане) ===== */
+.token-hpbar{
+  position: absolute;
+  height: 12px;
+  border: 1px solid #222;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.65);
+  overflow: hidden;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.token-hpbar .fill{
+  height: 100%;
+  width: 0%;
+  background: rgba(44, 167, 78, 0.85);
+}
+
+.token-hpbar .txt{
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 10px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+}
+
+/* ===== Мини-окно по двойному клику ===== */
+.token-mini{
+  position: absolute;
+  z-index: 10000;
+  width: 232px;
+  padding: 8px 10px;
+  border: 1px solid #555;
+  border-radius: 10px;
+  background: rgba(20,20,20,0.95);
+  color: #ddd;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+.token-mini .row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.token-mini .section{
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.18);
+  border-radius: 10px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.token-mini .section-title{
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.92);
+  margin-bottom: 6px;
+}
+
+.token-mini .title{
+  font-weight: 800;
+  color: #fff;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.token-mini .hp-fields{
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.token-mini .hp-field{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.token-mini .hp-field span{
+  font-size: 11px;
+  opacity: .85;
+}
+
+.token-mini input[type="number"]{
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.22);
+  color: #fff;
+}
+
+.token-mini .hp-delta{
+  display: grid;
+  grid-template-columns: 34px 1fr 34px;
+  gap: 6px;
+  align-items: center;
+}
+
+.token-mini .hp-delta-btn{
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.token-mini .triple{
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.token-mini .mini-box{
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.18);
+  border-radius: 10px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.token-mini .mini-box .k{
+  font-size: 11px;
+  opacity: .85;
+  white-space: nowrap;
+}
+
+.token-mini .mini-box .v{
+  font-size: 12px;
+  font-weight: 900;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.token-mini .stats-grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.token-mini .stat-box{
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.18);
+  border-radius: 10px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.token-mini .stat-box .k{ opacity: .85; font-size: 11px; }
+.token-mini .stat-box .v{ color:#fff; font-weight: 900; font-size: 12px; }
+
+.token-mini .btn{
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  margin-top: 6px;
 }
 
 .player.selected {
@@ -717,7 +893,7 @@ outline-color: #666;
 
 /* имя владельца (пользователя) — тоже с троеточием без ползунка */
 .owner-name{
-  max-width: 180px;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -730,13 +906,14 @@ outline-color: #666;
 
   border: 1px solid #444;
   border-radius: 4px;
-  padding: 5px 4px; /* чуть уже, чтобы рамка почти впритык к кнопкам */
+  /* чуть шире внутренние отступы — кнопки визуально не упираются в границы */
+  padding: 6px 8px;
   margin-bottom: 6px;
 
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 6px;
+  gap: 8px;
 
   background-color: #1a1a1a;
 }
@@ -803,6 +980,19 @@ outline-color: #666;
   text-transform: lowercase;
 }
 
+/* ===== МАЛЕНЬКИЙ БЕЙДЖ "СОЮЗНИК" ===== */
+.ally-badge{
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 179, 80, 0.95);
+  color: #bff3c6;
+  background: rgba(56, 179, 80, 0.12);
+  text-transform: lowercase;
+}
+
 /* справа: селект + кнопки */
 .player-actions {
   display: flex;
@@ -810,6 +1000,8 @@ outline-color: #666;
   align-items: stretch;
   gap: 4px;
   flex-shrink: 0;
+  /* чтобы рамка карточки чуть выступала относительно кнопок */
+  padding: 0 3px;
 }
 
 .player-actions-top{
@@ -2525,8 +2717,9 @@ textarea[data-sheet-path="text.profPlain.value"]{
 /* ================== DICE STACK (bottom-left) ================== */
 .dice-stack{
   position: fixed;
-  left: 14px;
-  bottom: 14px;
+  /* выравниваем по тем же отступам, что и основной интерфейс (body margin) */
+  left: 20px;
+  bottom: 20px;
   width: var(--dice-w);
   display: flex;
   flex-direction: column;
@@ -2537,7 +2730,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .dice-viz{
   position: relative;
   width: var(--dice-w);
-  padding: 7px;
+  padding: 6px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(20,20,20,0.92);
@@ -2548,7 +2741,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .dice-viz-title{
   font-weight: 900;
   font-size: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .dice-viz-controls{
@@ -2556,7 +2749,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
   flex-wrap: wrap;            /* разрешаем перенос строки */
   gap: 8px;
   align-items: flex-start;     /* чтобы “Инициатива” не тянула высоту */
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 /* Инициатива — отдельной строкой, влезает в рамку */
@@ -2626,8 +2819,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
 /* Кнопка "Бросить" занимает остаток строки после количества */
 .dice-viz-btn--roll{
   flex: 1 1 auto;
-  min-width: 76px;
-  padding: 6px 8px;     /* компактнее: кнопка меньше */
+  min-width: 88px;
+  padding: 7px 10px;     /* чуть компактнее, чтобы точно влезала */
 }
 
 /* ===== Dark dropdown (options list) ===== */
@@ -2677,8 +2870,9 @@ textarea[data-sheet-path="text.profPlain.value"]{
 }
 
 #dice-canvas{
-  width: 100%;
-  height: 104px;
+  /* уже/выше — чтобы кубик не вылезал за границы рамки "Бросок" */
+  width: 208px;
+  height: 96px;
   display: block;
   margin: 0 auto;
   border-radius: 12px;
@@ -2799,10 +2993,11 @@ textarea[data-sheet-path="text.profPlain.value"]{
 }
 
 #dice-canvas{
-  width: 250px;
-  height: 170px;
+  /* единый размер (не даём визуализации вылезать за рамки) */
+  width: 208px;
+  height: 96px;
   display: block;
-  margin: 4px auto 0;
+  margin: 0 auto;
   border-radius: 12px;
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.10);
@@ -4239,174 +4434,3 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .cmp-map-actions select{ background:rgba(0,0,0,.35); }
 .cmp-move{ display:flex; gap:8px; align-items:center; }
 .cmp-empty{ opacity:.75; padding:8px 0; }
-
-/* ================== TOKEN HP BAR (always on top) ================== */
-.hp-bar{
-  position:absolute;
-  height:12px;
-  transform: translateY(-2px);
-  display:flex;
-  align-items:center;
-  gap:6px;
-  z-index:10000;
-  pointer-events:none;
-}
-.hp-bar__track{
-  position:relative;
-  flex:1 1 auto;
-  height:8px;
-  border-radius:999px;
-  background: rgba(0,0,0,0.55);
-  border:1px solid rgba(255,255,255,0.22);
-  overflow:hidden;
-}
-.hp-bar__fill{
-  position:absolute;
-  left:0; top:0; bottom:0;
-  background: rgba(0,200,0,0.85);
-}
-.hp-bar__temp{
-  position:absolute;
-  left:0; top:0; bottom:0;
-  background: rgba(0,180,255,0.55);
-  mix-blend-mode: screen;
-}
-.hp-bar__text{
-  flex:0 0 auto;
-  font-size:10px;
-  line-height:1;
-  padding:1px 6px;
-  border-radius:999px;
-  background: rgba(0,0,0,0.65);
-  border:1px solid rgba(255,255,255,0.18);
-  color:#fff;
-  white-space:nowrap;
-}
-
-/* ================== TOKEN QUICK POPUP (dblclick) ================== */
-.token-quick-popup{
-  width:240px;
-  max-width:240px;
-  background: rgba(20,20,20,0.92);
-  border: 1px solid rgba(255,255,255,0.18);
-  border-radius:12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-  padding:10px;
-  color:#fff;
-  backdrop-filter: blur(6px);
-}
-.token-quick-popup .tqp-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:8px;
-  margin-bottom:8px;
-}
-.token-quick-popup .tqp-title{
-  font-size:13px;
-  font-weight:700;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-.token-quick-popup .tqp-x{
-  appearance:none;
-  border:none;
-  background: rgba(255,255,255,0.08);
-  color:#fff;
-  border-radius:10px;
-  width:26px;
-  height:26px;
-  cursor:pointer;
-}
-.token-quick-popup .tqp-row{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  margin-bottom:8px;
-}
-.token-quick-popup .tqp-label{
-  font-size:11px;
-  opacity:0.85;
-  width:28px;
-}
-.token-quick-popup .tqp-inp{
-  width:56px;
-  height:26px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.06);
-  color:#fff;
-  padding:0 8px;
-  font-size:12px;
-}
-.token-quick-popup .tqp-inp--temp{ width:52px; }
-.token-quick-popup .tqp-slash,
-.token-quick-popup .tqp-temp{
-  font-size:12px;
-  opacity:0.85;
-}
-.token-quick-popup .tqp-grid3{
-  display:grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap:6px;
-  margin-bottom:8px;
-}
-.token-quick-popup .tqp-kv{
-  border:1px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.04);
-  border-radius:12px;
-  padding:6px 8px;
-  text-align:center;
-}
-.token-quick-popup .tqp-k{
-  font-size:10px;
-  opacity:0.78;
-}
-.token-quick-popup .tqp-v{
-  font-size:13px;
-  font-weight:700;
-  margin-top:2px;
-}
-.token-quick-popup .tqp-stats{
-  display:grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap:6px;
-  margin-bottom:10px;
-}
-.token-quick-popup .tqp-stat{
-  border:1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.03);
-  border-radius:12px;
-  padding:6px 8px;
-  display:flex;
-  justify-content:space-between;
-  align-items:baseline;
-}
-.token-quick-popup .tqp-stat-k{
-  font-size:10px;
-  opacity:0.78;
-}
-.token-quick-popup .tqp-stat-v{
-  font-size:12px;
-  font-weight:700;
-}
-.token-quick-popup .tqp-stat-m{
-  font-size:11px;
-  opacity:0.85;
-  margin-left:4px;
-  font-weight:600;
-}
-.token-quick-popup .tqp-sheet-btn{
-  width:100%;
-  height:32px;
-  border-radius:12px;
-  border:1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.08);
-  color:#fff;
-  cursor:pointer;
-}
-.token-quick-popup .tqp-sheet-btn:hover,
-.token-quick-popup .tqp-x:hover{
-  background: rgba(255,255,255,0.12);
-}
