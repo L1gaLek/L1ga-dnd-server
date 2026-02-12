@@ -1,6 +1,11 @@
 /* char_sheet/sheet-bindings-core.js */
 (function(){
   const CS = window.CharSheet = window.CharSheet || {};
+  CS.utils = CS.utils || {};
+  CS.bindings = CS.bindings || {};
+  CS.dom = CS.dom || {};
+  CS.modal = CS.modal || {};
+  CS.db = CS.db || {};
   const uiStateByPlayerId = new Map();
 
   // debounce save timers
@@ -42,7 +47,7 @@
     if (!uiStateByPlayerId.has(playerId)) {
       uiStateByPlayerId.set(playerId, { activeTab: "basic", scrollTopByTab: {}, lastInteractAt: 0 });
     }
-    return uiStateByPlayerId.get(playerId);
+    return uiStateByPlayerId.CS.utils.get(playerId);
   }
 
   function captureUiStateFromDom(player) {
@@ -51,7 +56,7 @@
     const activeTab = player._activeSheetTab || st.activeTab || "basic";
     st.activeTab = activeTab;
 
-    const main = CS.dom?.sheetContent?.querySelector?.("#sheet-main");
+    const main = sheetContent?.querySelector?.("#sheet-main");
     if (main) {
       st.scrollTopByTab[activeTab] = main.scrollTop || 0;
     }
@@ -61,7 +66,7 @@
     if (!player?.id) return;
     const st = getUiState(player.id);
     const activeTab = player._activeSheetTab || st.activeTab || "basic";
-    const main = CS.dom?.sheetContent?.querySelector?.("#sheet-main");
+    const main = sheetContent?.querySelector?.("#sheet-main");
     if (main && st.scrollTopByTab && typeof st.scrollTopByTab[activeTab] === "number") {
       main.scrollTop = st.scrollTopByTab[activeTab];
     }
@@ -74,7 +79,6 @@
   }
 
   function isModalBusy(playerId) {
-    const sheetModal = CS.dom?.sheetModal;
     if (!sheetModal || sheetModal.classList.contains('hidden')) return false;
     const activeEl = document.activeElement;
     if (activeEl && sheetModal.contains(activeEl)) return true;
@@ -131,14 +135,11 @@
     return lines;
   }
 
-  // export for other modules (viewmodel)
-  CS.bindings.tiptapToPlainLines = tiptapToPlainLines;
-
   function scheduleSheetSave(player) {
     if (!player?.id || !ctx?.sendMessage) return;
 
     const key = player.id;
-    const prev = sheetSaveTimers.get(key);
+    const prev = sheetSaveTimers.CS.utils.get(key);
     if (prev) clearTimeout(prev);
 
     const t = setTimeout(() => {
@@ -515,13 +516,14 @@ if (path === "proficiency" || path === "proficiencyCustom") {
 
   // ===== Notes tab: add / rename / toggle / delete, text editing =====
 
-
+  // ================== EXPORTS ==================
   CS.bindings = CS.bindings || {};
   CS.bindings.openPopup = openPopup;
   CS.bindings.getUiState = getUiState;
+  CS.bindings.markModalInteracted = markModalInteracted;
   CS.bindings.captureUiStateFromDom = captureUiStateFromDom;
   CS.bindings.isModalBusy = isModalBusy;
-  CS.bindings.markModalInteracted = markModalInteracted;
+  CS.bindings.tiptapToPlainLines = tiptapToPlainLines;
   CS.bindings.scheduleSheetSave = scheduleSheetSave;
   CS.bindings.bindEditableInputs = bindEditableInputs;
 
