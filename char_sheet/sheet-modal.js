@@ -849,7 +849,7 @@ function bindCombatEditors(root, player, canEdit) {
 
     const force = !!opts.force;
     // Если пользователь сейчас редактирует что-то внутри модалки — не перерисовываем, чтобы не прыгал скролл/вкладка.
-    if (!force && player?.id && isModalBusy(player.id)) {
+    if (!force && player?.id && CS.bindings?.isModalBusy?.(player.id)) {
       return;
     }
 
@@ -1118,7 +1118,7 @@ function bindCombatEditors(root, player, canEdit) {
   // ================== PUBLIC API ==================
   function init(context) {
     ctx = context || null;
-    ensureWiredCloseHandlers();
+    CS.db?.ensureWiredCloseHandlers?.();
   }
 
   function open(player) {
