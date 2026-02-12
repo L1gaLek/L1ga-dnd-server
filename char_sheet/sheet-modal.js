@@ -9,12 +9,6 @@
 
 (function () {
   const CS = window.CharSheet = window.CharSheet || {};
-  CS.utils = CS.utils || {};
-  CS.bindings = CS.bindings || {};
-  CS.dom = CS.dom || {};
-  CS.modal = CS.modal || {};
-  CS.db = CS.db || {};
-  CS.viewmodel = CS.viewmodel || {};
 
   // ===== MODAL ELEMENTS =====
   const sheetModal = document.getElementById('sheet-modal');
@@ -24,38 +18,10 @@
   const sheetActions = document.getElementById('sheet-actions');
   const sheetContent = document.getElementById('sheet-content');
 
-  // publish DOM refs for other modules
-  CS.dom.sheetModal = sheetModal;
-  // Backward-compat: some older modules referenced a global `sheetModal` DOM element.
-  // Expose it on window to avoid `ReferenceError: sheetModal is not defined`.
-  window.sheetModal = sheetModal;
-  CS.dom.sheetClose = sheetClose;
-  CS.dom.sheetTitle = sheetTitle;
-  CS.dom.sheetSubtitle = sheetSubtitle;
-  CS.dom.sheetActions = sheetActions;
-  CS.dom.sheetContent = sheetContent;
-
-  // Convert viewmodel numeric-like values to safe strings for <input type="number">.
-  // ViewModel uses "-" as a fallback; number inputs cannot parse "-".
-  function safeNumAttr(v) {
-    if (v === null || v === undefined) return "";
-    const s = String(v).trim();
-    if (!s || s === "-") return "";
-    // allow integers/decimals with optional leading sign, but reject lone "-"
-    if (!/^[-+]?\d+(?:\.\d+)?$/.test(s)) return "";
-    return CS.utils.escapeHtml(s);
-  }
-
-
-
   // context from client.js
   let ctx = null;
 
   function canEditPlayer(player) {
-
-
-
-
     // client.js передаёт в init() функции getMyRole()/getMyId().
     // Важно: не полагаемся на ctx.myRole/ctx.myId (их может не быть),
     // иначе у игроков отключаются клики/выборы в "Основное".
@@ -380,7 +346,7 @@
       sheet.vitality["hp-temp"].value = clampedTemp;
 
       syncHpPopupInputs(sheet);
-      CS.bindings.markModalInteracted?.(player.id);
+      CS.bindings.markModalInteracted(player.id);
       CS.bindings.scheduleSheetSave(player);
       if (sheetContent) updateHeroChips(sheetContent, sheet);
     });
@@ -482,7 +448,7 @@
     sheet.vitality["hp-temp"].value = nextTemp;
 
     syncHpPopupInputs(sheet);
-    CS.bindings.markModalInteracted?.(player.id);
+    CS.bindings.markModalInteracted(player.id);
     CS.bindings.scheduleSheetSave(player);
     if (sheetContent) updateHeroChips(sheetContent, sheet);
   }
@@ -867,54 +833,12 @@ function bindCombatEditors(root, player, canEdit) {
   }
 
   function renderActiveTab(tabId, vm, canEdit) {
-    // After splitting the old monolith into multiple files, some tab renderers may live
-    // inside their own modules/IIFEs. Prefer CharSheet exports; fall back to window globals.
-    const tabs = (CS && CS.tabs) ? CS.tabs : {};
-    const spells = (CS && CS.spells) ? CS.spells : {};
-
-    const pick = (name) => (tabs && typeof tabs[name] === "function")
-      ? tabs[name]
-      : (typeof window[name] === "function" ? window[name] : null);
-
-    if (tabId === "basic") {
-      const fn = pick("renderBasicTab");
-      if (fn) return fn(vm, canEdit);
-      return `<div class="sheet-note">Ошибка: не загружена вкладка «Основа» (renderBasicTab).</div>`;
-    }
-
-    if (tabId === "spells") {
-      const fn = (spells && typeof spells.renderSpellsTab === "function") ? spells.renderSpellsTab
-        : pick("renderSpellsTab");
-      if (fn) return fn(vm, canEdit);
-      return `<div class="sheet-note">Ошибка: не загружена вкладка «Заклинания».</div>`;
-    }
-
-    if (tabId === "combat") {
-      const fn = pick("renderCombatTab");
-      if (fn) return fn(vm, canEdit);
-      return `<div class="sheet-note">Ошибка: не загружена вкладка «Бой» (renderCombatTab).</div>`;
-    }
-
-    if (tabId === "inventory") {
-      const fn = (tabs && typeof tabs.renderInventoryTab === "function") ? tabs.renderInventoryTab
-        : pick("renderInventoryTab");
-      if (fn) return fn(vm, canEdit);
-      return `<div class="sheet-note">Ошибка: не загружена вкладка «Инвентарь».</div>`;
-    }
-
-    if (tabId === "personality") {
-      const fn = pick("renderPersonalityTab");
-      if (fn) return fn(vm, canEdit);
-      return `<div class="sheet-note">Ошибка: не загружена вкладка «Личность».</div>`;
-    }
-
-    if (tabId === "notes") {
-      const fn = (tabs && typeof tabs.renderNotesTab === "function") ? tabs.renderNotesTab
-        : pick("renderNotesTab");
-      if (fn) return fn(vm, canEdit);
-      return `<div class="sheet-note">Ошибка: не загружена вкладка «Заметки».</div>`;
-    }
-
+    if (tabId === "basic") return renderBasicTab(vm, canEdit);
+    if (tabId === "spells") return CS.spells.renderSpellsTab(vm);
+    if (tabId === "combat") return renderCombatTab(vm);
+    if (tabId === "inventory") return CS.tabs.renderInventoryTab(vm);
+    if (tabId === "personality") return renderPersonalityTab(vm);
+    if (tabId === "notes") return CS.tabs.renderNotesTab(vm);
     return `<div class="sheet-note">Раздел в разработке</div>`;
   }
 
@@ -925,12 +849,12 @@ function bindCombatEditors(root, player, canEdit) {
 
     const force = !!opts.force;
     // Если пользователь сейчас редактирует что-то внутри модалки — не перерисовываем, чтобы не прыгал скролл/вкладка.
-    if (!force && player?.id && CS.bindings.isModalBusy?.(player.id)) {
+    if (!force && player?.id && isModalBusy(player.id)) {
       return;
     }
 
     // сохраняем текущую вкладку/скролл перед любым ререндером
-    CS.bindings.captureUiStateFromDom?.(player);
+    captureUiStateFromDom(player);
 
     const myRole = ctx.getMyRole?.();
     const myId = ctx.getMyId?.();
@@ -940,7 +864,7 @@ function bindCombatEditors(root, player, canEdit) {
     sheetTitle.textContent = `Инфа: ${player.name}`;
     sheetSubtitle.textContent = `Владелец: ${player.ownerName || 'Unknown'} • Тип: ${player.isBase ? 'Основа' : '-'}`;
 
-    CS.viewmodel.ensurePlayerSheetWrapper?.(player);
+    ensurePlayerSheetWrapper(player);
 
     sheetActions.innerHTML = '';
     const note = document.createElement('div');
@@ -967,7 +891,7 @@ function bindCombatEditors(root, player, canEdit) {
 
           // Мгновенно обновляем UI (не ждём round-trip через сервер)
           // и при этом не сбрасываем вкладку/скролл.
-          CS.bindings.markModalInteracted?.(player.id);
+          CS.bindings.markModalInteracted(player.id);
           renderSheetModal(player, { force: true });
 
           const tmp = document.createElement('div');
@@ -1075,12 +999,12 @@ function bindCombatEditors(root, player, canEdit) {
             </div>
             <div class="sheet-chip" data-hero="prof" title="Бонус мастерства">
               <div class="k">Владение</div>
-              <input class="sheet-chip-input" type="number" min="0" max="10" ${canEdit ? "" : "disabled"} data-sheet-path="proficiency" value="${safeNumAttr(vm.profBonus)}">
+              <input class="sheet-chip-input" type="number" min="0" max="10" ${canEdit ? "" : "disabled"} data-sheet-path="proficiency" value="${CS.utils.escapeHtml(String(vm.profBonus))}">
             </div>
 
             <div class="sheet-chip" data-hero="ac">
               <div class="k">Броня</div>
-              <input class="sheet-chip-input" type="number" min="0" max="40" ${canEdit ? "" : "disabled"} data-sheet-path="vitality.ac.value" data-hero-val="ac" value="${safeNumAttr(vm.ac)}">
+              <input class="sheet-chip-input" type="number" min="0" max="40" ${canEdit ? "" : "disabled"} data-sheet-path="vitality.ac.value" data-hero-val="ac" value="${CS.utils.escapeHtml(String(vm.ac))}">
             </div>
             <div class="sheet-chip sheet-chip--hp" data-hero="hp" data-hp-open role="button" tabindex="0" style="--hp-fill-pct:${CS.utils.escapeHtml(String(vm.hp ? Math.max(0, Math.min(100, Math.round((Number(vm.hpCur) / Math.max(1, Number(vm.hp))) * 100))) : 0))}%">
               <div class="hp-liquid" aria-hidden="true"></div>
@@ -1089,7 +1013,7 @@ function bindCombatEditors(root, player, canEdit) {
             </div>
             <div class="sheet-chip" data-hero="speed">
               <div class="k">Скорость</div>
-              <input class="sheet-chip-input" type="number" min="0" max="200" ${canEdit ? "" : "disabled"} data-sheet-path="vitality.speed.value" data-hero-val="speed" value="${safeNumAttr(vm.spd)}">
+              <input class="sheet-chip-input" type="number" min="0" max="200" ${canEdit ? "" : "disabled"} data-sheet-path="vitality.speed.value" data-hero-val="speed" value="${CS.utils.escapeHtml(String(vm.spd))}">
             </div>
           </div>
           </div>
@@ -1127,13 +1051,13 @@ function bindCombatEditors(root, player, canEdit) {
     // отмечаем взаимодействие, чтобы state-обновления не ломали скролл
     const mainEl = sheetContent.querySelector('#sheet-main');
     mainEl?.addEventListener('scroll', () => {
-      CS.bindings.markModalInteracted?.(player.id);
+      CS.bindings.markModalInteracted(player.id);
       // и сохраняем текущий скролл в uiState
-      CS.bindings.captureUiStateFromDom?.(player);
+      captureUiStateFromDom(player);
     }, { passive: true });
 
-    sheetContent.addEventListener('pointerdown', () => CS.bindings.markModalInteracted?.(player.id), { passive: true });
-    sheetContent.addEventListener('keydown', () => CS.bindings.markModalInteracted?.(player.id), { passive: true });
+    sheetContent.addEventListener('pointerdown', () => CS.bindings.markModalInteracted(player.id), { passive: true });
+    sheetContent.addEventListener('keydown', () => CS.bindings.markModalInteracted(player.id), { passive: true });
 
     CS.bindings.bindEditableInputs(sheetContent, player, canEdit);
     CS.db.bindLanguagesUi(sheetContent, player, canEdit);
@@ -1194,14 +1118,7 @@ function bindCombatEditors(root, player, canEdit) {
   // ================== PUBLIC API ==================
   function init(context) {
     ctx = context || null;
-    // After splitting into modules this helper lives in sheet-db-static.js.
-    // Keep init safe even if some scripts load out-of-order.
-    try {
-      const CS = window.CharSheet;
-      CS?.db?.ensureWiredCloseHandlers?.();
-    } catch (e) {
-      console.warn('[CharSheet] ensureWiredCloseHandlers failed', e);
-    }
+    ensureWiredCloseHandlers();
   }
 
   function open(player) {

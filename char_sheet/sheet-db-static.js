@@ -2,10 +2,6 @@
 (function(){
   const CS = window.CharSheet = window.CharSheet || {};
 
-  // В монолитной версии `sheetContent` был в общей области видимости.
-  // После разбиения на модули получаем его напрямую из DOM.
-  const sheetContent = document.getElementById('sheet-content');
-
   function canEditPlayerProxy(player){
     try { return !!(CS.runtime && typeof CS.runtime.canEditPlayer === "function" && CS.runtime.canEditPlayer(player)); }
     catch { return false; }
@@ -74,14 +70,6 @@ function normalizeLanguagesLearned(raw) {
     }))
     .filter(x => x.name);
 }
-
-  // Expose helpers for other modules (monolith/backward-compat)
-  CS.utils = CS.utils || {};
-  CS.utils.extractLanguagesHint = extractLanguagesHint;
-  CS.utils.normalizeLanguagesLearned = normalizeLanguagesLearned;
-  // Some modules still reference these as globals
-  window.extractLanguagesHint = extractLanguagesHint;
-  window.normalizeLanguagesLearned = normalizeLanguagesLearned;
 
 
 function openLanguagesPopup(player) {
@@ -386,23 +374,18 @@ function bindLanguagesUi(root, player, canEdit) {
 
   function showCondPopup() { ensureCondPopup().classList.remove("hidden"); }
   function hideCondPopup() { condPopupEl?.classList.add("hidden"); }
-  function ensureWiredCloseHandlers() {
-    const sheetClose = CS.dom?.sheetClose;
-    const sheetModal = CS.dom?.sheetModal;
-    const sheetContent = CS.dom?.sheetContent;
-    const close = () => CS.modal?.closeModal?.();
-
-    sheetClose?.addEventListener('click', close);
+function ensureWiredCloseHandlers() {
+    sheetClose?.addEventListener('click', closeModal);
 
     // клик по фону закрывает
     sheetModal?.addEventListener('click', (e) => {
-      if (e.target === sheetModal) close();
+      if (e.target === sheetModal) closeModal();
     });
 
     // ESC закрывает
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && sheetModal && !sheetModal.classList.contains('hidden')) {
-        close();
+        closeModal();
       }
     });
 
@@ -411,7 +394,7 @@ function bindLanguagesUi(root, player, canEdit) {
       const t = e.target;
       if (!(t instanceof Element)) return;
       const chip = t.closest('[data-hp-open]');
-      if (chip) CS.modal?.showHpPopup?.();
+      if (chip) showHpPopup();
     });
 
     sheetContent?.addEventListener('keydown', (e) => {
@@ -421,7 +404,7 @@ function bindLanguagesUi(root, player, canEdit) {
       if (!chip) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        CS.modal?.showHpPopup?.();
+        showHpPopup();
       }
     });
 
@@ -506,26 +489,5 @@ function bindLanguagesUi(root, player, canEdit) {
   CS.db.LANGUAGES_DB = LANGUAGES_DB;
   CS.db.openLanguagesPopup = openLanguagesPopup;
   CS.db.bindLanguagesUi = bindLanguagesUi;
-  // Используется из sheet-modal.js
-  CS.db.ensureWiredCloseHandlers = ensureWiredCloseHandlers;
-  // Используется из sheet-modal.js для закрытия
-  CS.db.hideExhPopup = hideExhPopup;
-  CS.db.hideCondPopup = hideCondPopup;
-  CS.db.showExhPopup = showExhPopup;
-  CS.db.showCondPopup = showCondPopup;
-
-
-  // Also expose languages binder as global (backward-compat)
-  window.bindLanguagesUi = bindLanguagesUi;
-
-
-  // Expose quick interaction wirers (backward-compat)
-  CS.db.wireQuickBasicInteractions = wireQuickBasicInteractions;
-  window.wireQuickBasicInteractions = wireQuickBasicInteractions;
-
-
-  // Expose close-handler wiring (backward-compat)
-  CS.db.ensureWiredCloseHandlers = ensureWiredCloseHandlers;
-  window.ensureWiredCloseHandlers = ensureWiredCloseHandlers;
 
 })();

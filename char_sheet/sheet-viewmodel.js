@@ -433,28 +433,7 @@
     // “прочие владения и заклинания” (редактируемый текст)
     const profDoc = sheet?.text?.prof?.value?.data;
     const profPlain = (sheet?.text?.profPlain?.value ?? sheet?.text?.profPlain ?? "");
-    // tiptap doc -> plain lines (function lives in bindings-core after split)
-    const tiptapToPlainLinesFn = (CS.bindings && typeof CS.bindings.tiptapToPlainLines === "function")
-      ? CS.bindings.tiptapToPlainLines
-      : function fallbackTiptapToPlainLines(doc) {
-          try {
-            const out = [];
-            const walk = (node) => {
-              if (!node) return;
-              if (Array.isArray(node)) return node.forEach(walk);
-              if (node.type === "text" && typeof node.text === "string") out.push(node.text);
-              if (Array.isArray(node.content)) walk(node.content);
-            };
-            walk(doc);
-            return out.join(" ")
-              .split(/\r?\n/)
-              .map(s => s.trim())
-              .filter(Boolean);
-          } catch {
-            return [];
-          }
-        };
-    let profLines = tiptapToPlainLinesFn(profDoc);
+    let profLines = tiptapToPlainLines(profDoc);
     // если нет tiptap-данных — используем редактируемый plain-text
     if ((!profLines || !profLines.length) && typeof profPlain === "string") {
       profLines = profPlain.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
@@ -671,19 +650,6 @@ const weapons = weaponsRaw
   CS.utils.formatMod = formatMod;
   CS.utils.safeInt = safeInt;
   CS.utils.numLike = numLike;
-
-  // Expose path helpers for other modules (backward-compat)
-  CS.utils.getByPath = getByPath;
-  CS.utils.setByPath = setByPath;
-  // Some modules still reference these as globals
-  window.getByPath = getByPath;
-  window.setByPath = setByPath;
-
-  // Expose proficiency bonus helper (backward-compat)
-  CS.utils.getProfBonus = getProfBonus;
-  window.getProfBonus = getProfBonus;
-
-
   CS.utils.scoreToModifier = scoreToModifier;
   CS.utils.abilityModFromScore = abilityModFromScore;
   CS.utils.parseModInput = parseModInput;
@@ -695,7 +661,5 @@ const weapons = weaponsRaw
   CS.viewmodel.parseSpellsFromPlain = parseSpellsFromPlain;
   CS.viewmodel.createEmptySheet = createEmptySheet;
   CS.viewmodel.toViewModel = toViewModel;
-  // Used by sheet-modal.js (was global before splitting)
-  CS.viewmodel.ensurePlayerSheetWrapper = ensurePlayerSheetWrapper;
 
 })();

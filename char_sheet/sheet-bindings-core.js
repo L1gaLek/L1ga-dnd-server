@@ -1,14 +1,6 @@
 /* char_sheet/sheet-bindings-core.js */
 (function(){
   const CS = window.CharSheet = window.CharSheet || {};
-  CS.utils = CS.utils || {};
-  CS.bindings = CS.bindings || {};
-  CS.dom = CS.dom || {};
-  CS.modal = CS.modal || {};
-  CS.db = CS.db || {};
-  // DOM refs are owned by sheet-modal.js, but we keep safe fallbacks here.
-  const getSheetModalEl = () => CS.dom?.sheetModal || document.getElementById('sheet-modal');
-  const getSheetContentEl = () => CS.dom?.sheetContent || document.getElementById('sheet-content');
   const uiStateByPlayerId = new Map();
 
   // debounce save timers
@@ -50,7 +42,7 @@
     if (!uiStateByPlayerId.has(playerId)) {
       uiStateByPlayerId.set(playerId, { activeTab: "basic", scrollTopByTab: {}, lastInteractAt: 0 });
     }
-    return uiStateByPlayerId.get(playerId);
+    return uiStateByPlayerId.CS.utils.get(playerId);
   }
 
   function captureUiStateFromDom(player) {
@@ -59,7 +51,6 @@
     const activeTab = player._activeSheetTab || st.activeTab || "basic";
     st.activeTab = activeTab;
 
-    const sheetContent = getSheetContentEl();
     const main = sheetContent?.querySelector?.("#sheet-main");
     if (main) {
       st.scrollTopByTab[activeTab] = main.scrollTop || 0;
@@ -70,7 +61,6 @@
     if (!player?.id) return;
     const st = getUiState(player.id);
     const activeTab = player._activeSheetTab || st.activeTab || "basic";
-    const sheetContent = getSheetContentEl();
     const main = sheetContent?.querySelector?.("#sheet-main");
     if (main && st.scrollTopByTab && typeof st.scrollTopByTab[activeTab] === "number") {
       main.scrollTop = st.scrollTopByTab[activeTab];
@@ -84,7 +74,6 @@
   }
 
   function isModalBusy(playerId) {
-    const sheetModal = getSheetModalEl();
     if (!sheetModal || sheetModal.classList.contains('hidden')) return false;
     const activeEl = document.activeElement;
     if (activeEl && sheetModal.contains(activeEl)) return true;
@@ -522,46 +511,12 @@ if (path === "proficiency" || path === "proficiencyCustom") {
 
   // ===== Notes tab: add / rename / toggle / delete, text editing =====
 
-  // ================== EXPORTS ==================
+
   CS.bindings = CS.bindings || {};
   CS.bindings.openPopup = openPopup;
   CS.bindings.getUiState = getUiState;
   CS.bindings.markModalInteracted = markModalInteracted;
-  CS.bindings.captureUiStateFromDom = captureUiStateFromDom;
-  CS.bindings.isModalBusy = isModalBusy;
-  CS.bindings.tiptapToPlainLines = tiptapToPlainLines;
   CS.bindings.scheduleSheetSave = scheduleSheetSave;
   CS.bindings.bindEditableInputs = bindEditableInputs;
-
-
-
-  // Expose binding helpers for other modules (backward-compat)
-  CS.bindings = CS.bindings || {};
-  CS.bindings.captureUiStateFromDom = captureUiStateFromDom;
-  CS.bindings.restoreUiStateToDom = restoreUiStateToDom;
-  CS.bindings.isModalBusy = isModalBusy;
-  CS.bindings.markModalInteracted = markModalInteracted;
-
-  CS.bindings.bindEditableInputs = bindEditableInputs;
-  CS.bindings.bindAbilityAndSkillEditors = bindAbilityAndSkillEditors;
-  CS.bindings.bindSaveProfDots = bindSaveProfDots;
-  CS.bindings.bindSkillBoostDots = bindSkillBoostDots;
-  CS.bindings.bindStatRollButtons = bindStatRollButtons;
-
-  // Some modules still reference these as globals
-  window.captureUiStateFromDom = captureUiStateFromDom;
-  window.restoreUiStateToDom = restoreUiStateToDom;
-  window.isModalBusy = isModalBusy;
-  window.markModalInteracted = markModalInteracted;
-
-  window.bindEditableInputs = bindEditableInputs;
-  window.bindAbilityAndSkillEditors = bindAbilityAndSkillEditors;
-  window.bindSaveProfDots = bindSaveProfDots;
-  window.bindSkillBoostDots = bindSkillBoostDots;
-  window.bindStatRollButtons = bindStatRollButtons;
-
-  // Expose coin conversion map used by inventory tab (backward-compat)
-  window.COIN_TO_CP = COIN_TO_CP;
-
 
 })();
