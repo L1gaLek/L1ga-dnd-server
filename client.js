@@ -54,7 +54,6 @@ const playerColorInput = document.getElementById('player-color');
 const playerSizeInput = document.getElementById('player-size');
 
 const isBaseCheckbox = document.getElementById('is-base');
-
 const isAllyCheckbox = document.getElementById('is-ally');
 
 const dice = document.getElementById('dice');
@@ -80,21 +79,6 @@ const boardBgClearBtn = document.getElementById('board-bg-clear');
 // ===== Подложка по ссылке + прозрачности (GM) =====
 const boardBgUrlInput = document.getElementById('board-bg-url');
 const boardBgUrlApplyBtn = document.getElementById('board-bg-url-apply');
-
-// ================== TOKEN QUICK POPUP (reliable dblclick) ==================
-// Иногда dblclick на токене может "съедаться" из‑за drag/select логики.
-// Поэтому ловим dblclick на всём поле в capture и открываем попап по id токена.
-try {
-  board?.addEventListener('dblclick', (ev) => {
-    const token = ev.target?.closest?.('.player');
-    if (!token) return;
-    const pid = token.getAttribute('data-player-id');
-    if (!pid) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    openTokenQuickPopup(pid);
-  }, true);
-} catch {}
 
 // Очередность хода (над полем слева)
 const turnOrderBox = document.getElementById('turn-order-box');
@@ -217,12 +201,6 @@ function applyRoleToUI() {
   // "Управление игроками" используется всеми, кроме зрителей
   const pm = document.getElementById('player-management');
   if (pm) pm.style.display = spectator ? 'none' : '';
-
-  // Галочка "Союзник" — только для ГМ
-  if (typeof isAllyCheckbox !== 'undefined' && isAllyCheckbox) {
-    const lbl = isAllyCheckbox.closest('label');
-    if (lbl) lbl.style.display = gm ? '' : 'none';
-  }
 
 
   // Disable GM-only buttons defensively
@@ -546,9 +524,7 @@ let wallMode = null;
 let mouseDown = false;
 
 const playerElements = new Map();
-const hpBarElements = new Map(); // playerId -> hp bar element (absolute overlay)
-let tokenQuickPopupEl = null;
-let tokenQuickPopupForId = null;
+const hpBarElements = new Map(); // playerId -> hp bar element (absolute on board)
 let finishInitiativeSent = false;
 
 // users map (ownerId -> {name, role}) — только подключённые сейчас
@@ -765,6 +741,13 @@ loginDiv.style.display = 'none';
         if (!existingIds.has(id)) {
           el.remove();
           playerElements.delete(id);
+        }
+      });
+
+      hpBarElements.forEach((el, id) => {
+        if (!existingIds.has(id)) {
+          el.remove();
+          hpBarElements.delete(id);
         }
       });
 
@@ -1106,6 +1089,13 @@ function updatePlayerList() {
         nameWrap.appendChild(baseBadge);
       }
 
+      if (p.isAlly) {
+        const allyBadge = document.createElement('span');
+        allyBadge.className = 'ally-badge';
+        allyBadge.textContent = 'союзник';
+        nameWrap.appendChild(allyBadge);
+      }
+
       li.appendChild(nameWrap);
 
       const actions = document.createElement('div');
@@ -1270,6 +1260,269 @@ function renderBoard(state) {
   players.forEach(p => setPlayerPosition(p));
 }
 
+// ================== SHEET HELPERS (for HP bar + mini popup) ==================
+function getFrom(obj, path, fallback) {
+  try {
+    const parts = String(path || '').split('.').filter(Boolean);
+    let cur = obj;
+    for (const k of parts) {
+      if (!cur || typeof cur !== 'object') return fallback;
+      cur = cur[k];
+    }
+    return (cur === undefined ? fallback : cur);
+  } catch {
+    return fallback;
+  }
+}
+
+function safeNum(v, fallback = null) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function getQuickSheetStats(player) {
+  const s = player?.sheet?.parsed || {};
+  const hpMax = safeNum(getFrom(s, 'vitality.hp-max.value', null), null);
+  const hpCur = safeNum(getFrom(s, 'vitality.hp-current.value', null), null);
+  const ac = safeNum(getFrom(s, 'vitality.ac.value', null), null);
+  const speed = safeNum(getFrom(s, 'vitality.speed.value', null), null);
+  const lvl = safeNum(getFrom(s, 'info.level.value', null), null);
+  const stats = {
+    str: safeNum(getFrom(s, 'stats.str.score', null), null),
+    dex: safeNum(getFrom(s, 'stats.dex.score', null), null),
+    con: safeNum(getFrom(s, 'stats.con.score', null), null),
+    int: safeNum(getFrom(s, 'stats.int.score', null), null),
+    wis: safeNum(getFrom(s, 'stats.wis.score', null), null),
+    cha: safeNum(getFrom(s, 'stats.cha.score', null), null)
+  };
+  return { hpMax, hpCur, ac, speed, lvl, stats };
+}
+
+function ensureSheetPath(sheetObj, path) {
+  const parts = String(path || '').split('.').filter(Boolean);
+  let cur = sheetObj;
+  for (let i = 0; i < parts.length; i++) {
+    const k = parts[i];
+    if (i === parts.length - 1) return { parent: cur, key: k };
+    if (!cur[k] || typeof cur[k] !== 'object') cur[k] = {};
+    cur = cur[k];
+  }
+  return { parent: sheetObj, key: null };
+}
+
+function upsertSheetNumber(player, path, value) {
+  const pid = String(player?.id || '');
+  if (!pid) return;
+  const current = players.find(p => String(p?.id) === pid);
+  if (!current) return;
+  const nextSheet = deepClone(current.sheet || { parsed: {} });
+  if (!nextSheet.parsed || typeof nextSheet.parsed !== 'object') nextSheet.parsed = {};
+  const { parent, key } = ensureSheetPath(nextSheet.parsed, path);
+  if (!parent || !key) return;
+  if (!parent[key] || typeof parent[key] !== 'object') parent[key] = {};
+  parent[key].value = value;
+  // оптимистично обновляем локально
+  current.sheet = nextSheet;
+  sendMessage({ type: 'setPlayerSheet', id: pid, sheet: nextSheet });
+}
+
+// ================== HP BAR (always on top) ==================
+function updateHpBar(player, tokenEl) {
+  const pid = String(player?.id || '');
+  if (!pid) return;
+  let bar = hpBarElements.get(pid);
+
+  const size = Number(player?.size) || 1;
+
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'token-hpbar';
+    bar.innerHTML = `<div class="fill"></div><div class="txt"></div>`;
+    board.appendChild(bar);
+    hpBarElements.set(pid, bar);
+  }
+
+  if (!tokenEl || tokenEl.style.display === 'none' || player.x === null || player.y === null) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  const { hpMax, hpCur } = getQuickSheetStats(player);
+  const max = (hpMax !== null ? Math.max(0, hpMax) : 0);
+  const cur = (hpCur !== null ? hpCur : max);
+  const pct = max > 0 ? Math.max(0, Math.min(100, Math.round((cur / max) * 100))) : 0;
+
+  bar.style.display = 'block';
+  bar.style.width = `${size * 50}px`;
+  bar.style.left = `${tokenEl.offsetLeft}px`;
+  bar.style.top = `${tokenEl.offsetTop - 14}px`;
+
+  const fill = bar.querySelector('.fill');
+  const txt = bar.querySelector('.txt');
+  if (fill) fill.style.width = `${pct}%`;
+  if (txt) txt.textContent = `${cur ?? 0}/${max ?? 0}`;
+}
+
+// ================== MINI POPUP (dblclick on token) ==================
+let tokenMiniEl = null;
+let tokenMiniPlayerId = null;
+
+function closeTokenMini() {
+  if (tokenMiniEl) {
+    tokenMiniEl.remove();
+    tokenMiniEl = null;
+    tokenMiniPlayerId = null;
+  }
+}
+
+function formatVal(v, fallback = '—') {
+  return (v === null || v === undefined || v === '' || (typeof v === 'number' && !Number.isFinite(v))) ? fallback : String(v);
+}
+
+function positionTokenMini(tokenEl) {
+  if (!tokenMiniEl || !tokenEl) return;
+  // ставим примерно над токеном, по центру
+  const left = tokenEl.offsetLeft + (tokenEl.offsetWidth / 2);
+  const top = tokenEl.offsetTop - 8;
+  tokenMiniEl.style.left = `${left}px`;
+  tokenMiniEl.style.top = `${top}px`;
+  tokenMiniEl.style.transform = 'translate(-50%, -100%)';
+
+  // держим в пределах поля (по возможности)
+  const b = board.getBoundingClientRect();
+  const r = tokenMiniEl.getBoundingClientRect();
+  let dx = 0;
+  let dy = 0;
+  if (r.left < b.left) dx = b.left - r.left + 6;
+  if (r.right > b.right) dx = -(r.right - b.right + 6);
+  if (r.top < b.top) dy = b.top - r.top + 6;
+  if (dx || dy) {
+    const curLeft = Number(tokenMiniEl.style.left.replace('px','')) || left;
+    const curTop = Number(tokenMiniEl.style.top.replace('px','')) || top;
+    tokenMiniEl.style.left = `${curLeft + dx}px`;
+    tokenMiniEl.style.top = `${curTop + dy}px`;
+  }
+}
+
+function openTokenMini(playerId) {
+  const p = players.find(pp => String(pp?.id) === String(playerId));
+  if (!p) return;
+  const tokenEl = playerElements.get(p.id);
+  if (!tokenEl || tokenEl.style.display === 'none') return;
+
+  // toggle
+  if (tokenMiniEl && tokenMiniPlayerId === p.id) {
+    closeTokenMini();
+    return;
+  }
+  closeTokenMini();
+
+  const q = getQuickSheetStats(p);
+  const maxHp = (q.hpMax !== null ? q.hpMax : 0);
+  const curHp = (q.hpCur !== null ? q.hpCur : maxHp);
+
+  const card = document.createElement('div');
+  card.className = 'token-mini';
+  card.innerHTML = `
+    <div class="title">${String(p.name || 'Персонаж')}</div>
+    <div class="section">
+      <div class="section-title">Здоровье</div>
+      <div class="hp-fields">
+        <label class="hp-field">
+          <span>Тек.</span>
+          <input type="number" class="hp-cur" min="0" max="999" value="${formatVal(curHp, 0)}" />
+        </label>
+        <label class="hp-field">
+          <span>Макс.</span>
+          <input type="number" class="hp-max" min="0" max="999" value="${formatVal(maxHp, 0)}" />
+        </label>
+      </div>
+      <div class="hp-delta">
+        <button type="button" class="hp-delta-btn hp-delta-minus">−</button>
+        <input type="number" class="hp-delta-val" min="0" max="999" value="0" />
+        <button type="button" class="hp-delta-btn hp-delta-plus">+</button>
+      </div>
+    </div>
+
+    <div class="triple">
+      <div class="mini-box"><span class="k">КД</span><span class="v">${formatVal(q.ac)}</span></div>
+      <div class="mini-box"><span class="k">Скорость</span><span class="v">${formatVal(q.speed)}</span></div>
+      <div class="mini-box"><span class="k">Уровень</span><span class="v">${formatVal(q.lvl)}</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Характеристики</div>
+      <div class="stats-grid">
+        <div class="stat-box"><span class="k">СИЛ</span><span class="v">${formatVal(q.stats.str)}</span></div>
+        <div class="stat-box"><span class="k">ИНТ</span><span class="v">${formatVal(q.stats.int)}</span></div>
+        <div class="stat-box"><span class="k">ЛОВ</span><span class="v">${formatVal(q.stats.dex)}</span></div>
+        <div class="stat-box"><span class="k">МУД</span><span class="v">${formatVal(q.stats.wis)}</span></div>
+        <div class="stat-box"><span class="k">ТЕЛ</span><span class="v">${formatVal(q.stats.con)}</span></div>
+        <div class="stat-box"><span class="k">ХАР</span><span class="v">${formatVal(q.stats.cha)}</span></div>
+      </div>
+    </div>
+
+    <button class="btn" type="button">Лист персонажа</button>
+  `;
+
+  // prevent board clicks
+  card.addEventListener('mousedown', (e) => e.stopPropagation());
+  card.addEventListener('click', (e) => e.stopPropagation());
+
+  const hpCurInput = card.querySelector('.hp-cur');
+  const hpMaxInput = card.querySelector('.hp-max');
+  const hpDeltaInput = card.querySelector('.hp-delta-val');
+  const hpDeltaMinus = card.querySelector('.hp-delta-minus');
+  const hpDeltaPlus = card.querySelector('.hp-delta-plus');
+  const sheetBtn = card.querySelector('.btn');
+
+  const applyHp = () => {
+    const cur = safeNum(hpCurInput?.value, 0) ?? 0;
+    const max = safeNum(hpMaxInput?.value, 0) ?? 0;
+    upsertSheetNumber(p, 'vitality.hp-max', Math.max(0, max));
+    upsertSheetNumber(p, 'vitality.hp-current', Math.max(0, Math.min(Math.max(0, max), cur)));
+    // сразу обновим полоску
+    updateHpBar(p, tokenEl);
+  };
+
+  hpCurInput?.addEventListener('change', applyHp);
+  hpMaxInput?.addEventListener('change', applyHp);
+
+  const applyDelta = (sign) => {
+    const delta = safeNum(hpDeltaInput?.value, 0) ?? 0;
+    if (!delta) return;
+    const cur = safeNum(hpCurInput?.value, 0) ?? 0;
+    const max = safeNum(hpMaxInput?.value, 0) ?? 0;
+    const next = (sign < 0) ? (cur - delta) : (cur + delta);
+    const clamped = Math.max(0, Math.min(Math.max(0, max), next));
+    if (hpCurInput) hpCurInput.value = String(clamped);
+    applyHp();
+  };
+
+  hpDeltaMinus?.addEventListener('click', () => applyDelta(-1));
+  hpDeltaPlus?.addEventListener('click', () => applyDelta(1));
+
+  sheetBtn?.addEventListener('click', () => {
+    window.InfoModal?.open?.(p);
+  });
+
+  board.appendChild(card);
+  tokenMiniEl = card;
+  tokenMiniPlayerId = p.id;
+  // position after append (so size is known)
+  positionTokenMini(tokenEl);
+}
+
+// close mini on outside click / Esc
+document.addEventListener('mousedown', (e) => {
+  if (!tokenMiniEl) return;
+  if (e.target && tokenMiniEl.contains(e.target)) return;
+  closeTokenMini();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeTokenMini();
+});
+
 // ================== PLAYER POSITION ==================
 function setPlayerPosition(player) {
   let el = playerElements.get(player.id);
@@ -1277,7 +1530,6 @@ function setPlayerPosition(player) {
   if (!el) {
     el = document.createElement('div');
     el.classList.add('player');
-    el.setAttribute('data-player-id', String(player.id));
     el.textContent = player.name?.[0] || '?';
     el.style.backgroundColor = player.color;
     el.style.position = 'absolute';
@@ -1293,28 +1545,16 @@ function setPlayerPosition(player) {
       }
     });
 
-    // HP bar overlay (always on top)
-    if (!hpBarElements.has(player.id)) {
-      const hb = document.createElement('div');
-      hb.className = 'hp-bar';
-      hb.setAttribute('data-hp-player', String(player.id));
-      board.appendChild(hb);
-      hpBarElements.set(player.id, hb);
-    }
-
-    // Quick popup on double click
-    el.addEventListener('dblclick', (ev) => {
-      ev.stopPropagation();
-      openTokenQuickPopup(player.id);
+    // двойной клик — мини-окно со статами
+    el.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      openTokenMini(player.id);
     });
 
     board.appendChild(el);
     playerElements.set(player.id, el);
     player.element = el;
   }
-
-  // на всякий случай обновляем id (если элемент переиспользуется)
-  el.setAttribute('data-player-id', String(player.id));
 
   el.textContent = player.name ? player.name[0] : '?';
   el.style.backgroundColor = player.color;
@@ -1323,9 +1563,7 @@ function setPlayerPosition(player) {
 
   if (player.x === null || player.y === null) {
     el.style.display = 'none';
-    const hb = hpBarElements.get(player.id);
-    if (hb) hb.style.display = 'none';
-    if (tokenQuickPopupForId === player.id) closeTokenQuickPopup();
+    updateHpBar(player, el);
     return;
   }
   el.style.display = 'flex';
@@ -1341,225 +1579,10 @@ function setPlayerPosition(player) {
     el.style.top = `${cell.offsetTop}px`;
   }
 
-  updateHpBarForPlayer(player, el);
-}
-
-// ================== HP BAR + QUICK TOKEN POPUP ==================
-function getSheetSafe(player) {
-  return player?.sheet?.parsed || null;
-}
-
-function getHpFromSheet(sheet) {
-  const max = Number(sheet?.vitality?.["hp-max"]?.value) || 0;
-  const cur = Number(sheet?.vitality?.["hp-current"]?.value) || 0;
-  const temp = Number(sheet?.vitality?.["hp-temp"]?.value) || 0;
-  return { max, cur, temp };
-}
-
-function updateHpBarForPlayer(player, tokenEl) {
-  const hb = hpBarElements.get(player.id);
-  if (!hb || !tokenEl) return;
-
-  hb.style.display = '';
-  hb.style.position = 'absolute';
-  hb.style.left = tokenEl.style.left || `${tokenEl.offsetLeft}px`;
-  hb.style.top = `${(tokenEl.offsetTop || 0) - 14}px`;
-  hb.style.width = `${tokenEl.offsetWidth || (Number(player.size) || 1) * 50}px`;
-  hb.style.zIndex = '10000';
-  hb.style.pointerEvents = 'none';
-
-  const sheet = getSheetSafe(player) || {};
-  const { max, cur, temp } = getHpFromSheet(sheet);
-
-  const safeMax = Math.max(0, Math.trunc(max));
-  const safeCur = Math.max(0, Math.min(safeMax || 0, Math.trunc(cur)));
-  const safeTemp = Math.max(0, Math.trunc(temp));
-
-  const percent = safeMax > 0 ? Math.max(0, Math.min(100, Math.round((safeCur / safeMax) * 100))) : 0;
-  const tempPercent = (safeTemp > 0 && safeMax > 0)
-    ? Math.max(0, Math.min(100, Math.round((safeTemp / safeMax) * 100)))
-    : 0;
-
-  hb.innerHTML = `
-    <div class="hp-bar__track">
-      <div class="hp-bar__fill" style="width:${percent}%"></div>
-      ${safeTemp > 0 ? `<div class="hp-bar__temp" style="width:${tempPercent}%"></div>` : ``}
-    </div>
-    <div class="hp-bar__text">${safeCur}/${safeMax}${safeTemp > 0 ? `+${safeTemp}` : ``}</div>
-  `;
-}
-
-function closeTokenQuickPopup() {
-  if (tokenQuickPopupEl) tokenQuickPopupEl.remove();
-  tokenQuickPopupEl = null;
-  tokenQuickPopupForId = null;
-}
-
-function openTokenQuickPopup(playerId) {
-  const p = (players || []).find(pp => String(pp.id) === String(playerId));
-  if (!p) return;
-
-  if (tokenQuickPopupForId && String(tokenQuickPopupForId) === String(playerId) && tokenQuickPopupEl) {
-    closeTokenQuickPopup();
-    return;
+  updateHpBar(player, el);
+  if (tokenMiniEl && tokenMiniPlayerId === player.id) {
+    positionTokenMini(el);
   }
-  closeTokenQuickPopup();
-
-  const tokenEl = playerElements.get(playerId);
-  if (!tokenEl) return;
-
-  const sheet = getSheetSafe(p) || {};
-  const myUid = String(localStorage.getItem('dnd_user_id') || '');
-  const canEdit = isGM() || (String(p.ownerId) === myUid);
-
-  const { max, cur, temp } = getHpFromSheet(sheet);
-  const ac = Number(sheet?.vitality?.ac?.value) || 0;
-  const spd = Number(sheet?.vitality?.speed?.value) || 0;
-  const lvl = Number(sheet?.info?.level?.value) || 1;
-
-  const stats = sheet?.stats || {};
-  const statIds = ["str", "dex", "con", "int", "wis", "cha"];
-  const statLabels = { str: "СИЛ", dex: "ЛОВ", con: "ТЕЛ", int: "ИНТ", wis: "МУД", cha: "ХАР" };
-
-  tokenQuickPopupEl = document.createElement('div');
-  tokenQuickPopupEl.className = 'token-quick-popup';
-  tokenQuickPopupEl.style.position = 'absolute';
-  tokenQuickPopupEl.style.zIndex = '20000';
-
-  const clampInt = (v, lo, hi) => {
-    const n = Math.trunc(Number(v) || 0);
-    return Math.max(lo, Math.min(hi, n));
-  };
-
-  tokenQuickPopupEl.innerHTML = `
-    <div class="tqp-head">
-      <div class="tqp-title">${escapeHtml(String(p.name || "-"))}</div>
-      <button class="tqp-x" type="button" data-tqp-close title="Закрыть">✕</button>
-    </div>
-
-    <div class="tqp-row tqp-row--hp">
-      <div class="tqp-label">HP</div>
-      <input class="tqp-inp" type="number" min="0" max="999" step="1" data-tqp-hp="cur" value="${escapeHtml(String(cur || 0))}" ${canEdit ? "" : "disabled"}>
-      <span class="tqp-slash">/</span>
-      <input class="tqp-inp" type="number" min="0" max="999" step="1" data-tqp-hp="max" value="${escapeHtml(String(max || 0))}" ${canEdit ? "" : "disabled"}>
-      <span class="tqp-temp">+</span>
-      <input class="tqp-inp tqp-inp--temp" type="number" min="0" max="999" step="1" data-tqp-hp="temp" value="${escapeHtml(String(temp || 0))}" ${canEdit ? "" : "disabled"}>
-    </div>
-
-    <div class="tqp-grid3">
-      <div class="tqp-kv"><div class="tqp-k">КЗ</div><div class="tqp-v">${escapeHtml(String(ac))}</div></div>
-      <div class="tqp-kv"><div class="tqp-k">Скор.</div><div class="tqp-v">${escapeHtml(String(spd))}</div></div>
-      <div class="tqp-kv"><div class="tqp-k">Ур.</div><div class="tqp-v">${escapeHtml(String(lvl))}</div></div>
-    </div>
-
-    <div class="tqp-stats">
-      ${statIds.map(k => {
-        const sc = Number(stats?.[k]?.score) || 0;
-        const mod = Number(stats?.[k]?.modifier) || 0;
-        const s = (mod >= 0 ? "+" : "") + String(mod);
-        return `<div class="tqp-stat"><div class="tqp-stat-k">${statLabels[k]}</div><div class="tqp-stat-v">${sc} <span class="tqp-stat-m">${s}</span></div></div>`;
-      }).join("")}
-    </div>
-
-    <button class="tqp-sheet-btn" type="button" data-tqp-open-sheet>Лист персонажа</button>
-  `;
-
-  board.appendChild(tokenQuickPopupEl);
-
-  const place = () => {
-    const left = tokenEl.offsetLeft + (tokenEl.offsetWidth / 2);
-    const top = tokenEl.offsetTop - 8;
-
-    const w = tokenQuickPopupEl.offsetWidth || 240;
-    const h = tokenQuickPopupEl.offsetHeight || 170;
-
-    let x = left - (w / 2);
-    let y = top - h;
-
-    x = Math.max(4, Math.min((board.offsetWidth - w - 4), x));
-    y = Math.max(4, y);
-
-    tokenQuickPopupEl.style.left = `${x}px`;
-    tokenQuickPopupEl.style.top = `${y}px`;
-  };
-
-  place();
-  tokenQuickPopupForId = playerId;
-
-  tokenQuickPopupEl.addEventListener('click', (e) => {
-    const t = e.target;
-    if (t && t.closest && t.closest('[data-tqp-close]')) {
-      closeTokenQuickPopup();
-      return;
-    }
-
-    const openBtn = t && t.closest && t.closest('[data-tqp-open-sheet]');
-    if (openBtn) {
-      try {
-        if (window.InfoModal && typeof window.InfoModal.open === 'function') {
-          window.InfoModal.open(playerId);
-        } else if (typeof window.openCharacterSheet === 'function') {
-          window.openCharacterSheet(playerId);
-        } else {
-          // best-effort: try click existing button if it exists
-          const btn = document.querySelector(`[data-open-sheet-player-id="${CSS.escape(String(playerId))}"]`);
-          btn?.click?.();
-        }
-      } catch (err) {
-        console.warn(err);
-      }
-    }
-  });
-
-  const onOutside = (ev) => {
-    if (!tokenQuickPopupEl) return;
-    if (tokenQuickPopupEl.contains(ev.target)) return;
-    if (tokenEl.contains(ev.target)) return;
-    closeTokenQuickPopup();
-    board.removeEventListener('mousedown', onOutside, true);
-  };
-  board.addEventListener('mousedown', onOutside, true);
-
-  let saveT = null;
-  const scheduleSave = () => {
-    if (!canEdit) return;
-    if (saveT) clearTimeout(saveT);
-    saveT = setTimeout(() => {
-      const live = (players || []).find(pp => String(pp.id) === String(playerId));
-      if (!live?.sheet?.parsed) return;
-
-      const root = tokenQuickPopupEl;
-      const maxEl = root.querySelector('[data-tqp-hp="max"]');
-      const curEl = root.querySelector('[data-tqp-hp="cur"]');
-      const tempEl = root.querySelector('[data-tqp-hp="temp"]');
-
-      const newMax = clampInt(maxEl?.value, 0, 999);
-      const newCur = clampInt(curEl?.value, 0, 999);
-      const newTemp = clampInt(tempEl?.value, 0, 999);
-
-      const sheet2 = live.sheet.parsed;
-      if (!sheet2.vitality) sheet2.vitality = {};
-      if (!sheet2.vitality["hp-max"]) sheet2.vitality["hp-max"] = { value: 0 };
-      if (!sheet2.vitality["hp-current"]) sheet2.vitality["hp-current"] = { value: 0 };
-      if (!sheet2.vitality["hp-temp"]) sheet2.vitality["hp-temp"] = { value: 0 };
-
-      sheet2.vitality["hp-max"].value = newMax;
-      sheet2.vitality["hp-current"].value = Math.max(0, Math.min(newMax, newCur));
-      sheet2.vitality["hp-temp"].value = newTemp;
-
-      sendMessage({ type: 'setPlayerSheet', id: playerId, sheet: live.sheet });
-      updateHpBarForPlayer(live, tokenEl);
-    }, 250);
-  };
-
-  tokenQuickPopupEl.addEventListener('input', (e) => {
-    const el = e.target;
-    if (!el || !el.getAttribute) return;
-    if (!el.getAttribute('data-tqp-hp')) return;
-    scheduleSave();
-  });
-
-  requestAnimationFrame(place);
 }
 
 // ================== NO-OVERLAP HELPERS (CLIENT SIDE) ==================
@@ -1606,7 +1629,7 @@ addPlayerBtn.addEventListener('click', () => {
 
   playerNameInput.value = '';
   if (isBaseCheckbox && !isBaseCheckbox.disabled) isBaseCheckbox.checked = false;
-  if (isAllyCheckbox && !isAllyCheckbox.disabled) isAllyCheckbox.checked = false;
+  if (isAllyCheckbox) isAllyCheckbox.checked = false;
 });
 
 // ================== MOVE PLAYER ==================
@@ -3275,7 +3298,6 @@ async function sendMessage(msg) {
           const player = msg.player || {};
           const isBase = !!player.isBase;
           const isMonster = !!player.isMonster;
-          const isAlly = !!player.isAlly;
           if (isBase) {
             const exists = (next.players || []).some(p => p.isBase && p.ownerId === myUserId);
             if (exists) {
@@ -3296,7 +3318,7 @@ async function sendMessage(msg) {
             pendingInitiativeChoice: (next.phase === "combat"),
             willJoinNextRound: false,
             isBase,
-            isAlly,
+            isAlly: !!player.isAlly,
             isMonster,
             monsterId: player.monsterId || null,
             ownerId: myUserId,
