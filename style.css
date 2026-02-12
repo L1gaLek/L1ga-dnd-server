@@ -15,7 +15,7 @@ body {
   /* единая геометрия левой колонки */
   --left-gap: 16px;
   --pm-w: 240px;   /* "Управление игроками" */
-  --pl-w: 292px;   /* "Пользователи и персонажи" + "Очередность хода" */
+  --pl-w: 282px;   /* "Пользователи и персонажи" + "Очередность хода" */
   --dice-w: var(--pm-w);
 }
 
@@ -93,8 +93,8 @@ body {
 }
 
 /* строка: цвет + размер */
-.pm-row{ display:flex; align-items:center; gap: 10px; }
-.pm-row--size{ justify-content: space-between; }
+.pm-row{ display:flex; align-items:center; gap: 6px; }
+.pm-row--size{ justify-content: flex-start; }
 
 #player-management #player-color{
   padding: 0;
@@ -105,7 +105,7 @@ body {
 .pm-size{
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -115,18 +115,31 @@ body {
   width: 88px;
 }
 
-/* строка: "Основа" + "Добавить" */
-.pm-row--bottom{ justify-content: space-between; }
-
-#player-management #add-player{
-  white-space: nowrap;
-  padding: 6px 10px;
+/* чекбоксы "Основа" + "Союзник" в одну строку */
+.pm-types-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-#player-management #add-player{
-  width: 120px;
+.pm-types-row .type-item{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   white-space: nowrap;
 }
+
+/* Кнопка "Добавить" под чекбоксами, на всю ширину, компактнее */
+#player-management #add-player.pm-add-btn{
+  width: 100%;
+  padding: 4px 10px;
+  height: 28px;
+  line-height: 18px;
+}
+
+#player-management #add-player.pm-add-btn{ white-space: nowrap; }
 
 #action-log h3,
 #player-management h3,
@@ -713,19 +726,17 @@ outline-color: #666;
 /* Рамка одного игрока в списке инициативы */
 .player-list-item {
   width: 100%;
-  max-width: calc(100% + 8px);
-  margin-left: -4px;
-  margin-right: -4px;
+  max-width: 100%;
 
   border: 1px solid #444;
   border-radius: 4px;
-  padding: 6px 6px;
+  padding: 5px 4px; /* чуть уже, чтобы рамка почти впритык к кнопкам */
   margin-bottom: 6px;
 
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
 
   background-color: #1a1a1a;
 }
@@ -2526,7 +2537,7 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .dice-viz{
   position: relative;
   width: var(--dice-w);
-  padding: 8px;
+  padding: 7px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(20,20,20,0.92);
@@ -2615,8 +2626,8 @@ textarea[data-sheet-path="text.profPlain.value"]{
 /* Кнопка "Бросить" занимает остаток строки после количества */
 .dice-viz-btn--roll{
   flex: 1 1 auto;
-  min-width: 88px;
-  padding: 7px 10px;     /* чуть компактнее, чтобы точно влезала */
+  min-width: 76px;
+  padding: 6px 8px;     /* компактнее: кнопка меньше */
 }
 
 /* ===== Dark dropdown (options list) ===== */
@@ -2667,7 +2678,6 @@ textarea[data-sheet-path="text.profPlain.value"]{
 
 #dice-canvas{
   width: 100%;
-  max-width: calc(var(--dice-w) - 16px);
   height: 104px;
   display: block;
   margin: 0 auto;
@@ -4231,45 +4241,6 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .cmp-empty{ opacity:.75; padding:8px 0; }
 
 /* ================== TOKEN HP BAR (always on top) ================== */
-.token-hpbar{
-  position: absolute;
-  height: 12px;
-  border: 1px solid rgba(255,255,255,0.22);
-  border-radius: 999px;
-  background: rgba(0,0,0,0.55);
-  overflow: hidden;
-  z-index: 10000;
-  pointer-events: none;
-}
-
-.token-hpbar .fill{
-  position: absolute;
-  inset: 0;
-  width: 0%;
-  background: rgba(0,200,0,0.85);
-}
-
-.token-hpbar .temp{
-  position: absolute;
-  inset: 0;
-  width: 0%;
-  background: rgba(0,180,255,0.55);
-  mix-blend-mode: screen;
-}
-
-.token-hpbar .txt{
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  line-height: 10px;
-  font-weight: 900;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.9);
-}
-
 .hp-bar{
   position:absolute;
   height:12px;
@@ -4374,39 +4345,6 @@ textarea[data-sheet-path="text.profPlain.value"]{
 .token-quick-popup .tqp-temp{
   font-size:12px;
   opacity:0.85;
-}
-
-/* Быстрое изменение HP: [-] [n] [+] */
-.token-quick-popup .tqp-row--delta{
-  display:flex;
-  justify-content:center;
-  gap:8px;
-  margin-top:-2px;
-}
-.token-quick-popup .tqp-dbtn{
-  width:32px;
-  height:28px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.06);
-  color:#fff;
-  font-weight:900;
-  cursor:pointer;
-}
-.token-quick-popup .tqp-dbtn:disabled{
-  opacity:.55;
-  cursor:not-allowed;
-}
-.token-quick-popup .tqp-delta{
-  width:64px;
-  height:28px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.06);
-  color:#fff;
-  padding:0 8px;
-  font-size:12px;
-  text-align:center;
 }
 .token-quick-popup .tqp-grid3{
   display:grid;
