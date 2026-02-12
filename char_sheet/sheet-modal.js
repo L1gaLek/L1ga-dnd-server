@@ -9,6 +9,12 @@
 
 (function () {
   const CS = window.CharSheet = window.CharSheet || {};
+  CS.utils = CS.utils || {};
+  CS.bindings = CS.bindings || {};
+  CS.dom = CS.dom || {};
+  CS.modal = CS.modal || {};
+  CS.db = CS.db || {};
+  CS.viewmodel = CS.viewmodel || {};
 
   // ===== MODAL ELEMENTS =====
   const sheetModal = document.getElementById('sheet-modal');
@@ -18,16 +24,13 @@
   const sheetActions = document.getElementById('sheet-actions');
   const sheetContent = document.getElementById('sheet-content');
 
-  // Expose DOM refs for other char_sheet modules (bindings/db/tabs)
-  CS.dom = CS.dom || {};
-  Object.assign(CS.dom, {
-    sheetModal,
-    sheetClose,
-    sheetTitle,
-    sheetSubtitle,
-    sheetActions,
-    sheetContent,
-  });
+  // publish DOM refs for other modules
+  CS.dom.sheetModal = sheetModal;
+  CS.dom.sheetClose = sheetClose;
+  CS.dom.sheetTitle = sheetTitle;
+  CS.dom.sheetSubtitle = sheetSubtitle;
+  CS.dom.sheetActions = sheetActions;
+  CS.dom.sheetContent = sheetContent;
 
   // context from client.js
   let ctx = null;
@@ -226,8 +229,8 @@
   function closeModal() {
     if (!sheetModal) return;
     hideHpPopup();
-    CS.db?.hideExhPopup?.();
-    CS.db?.hideCondPopup?.();
+    hideExhPopup();
+    hideCondPopup();
     sheetModal.classList.add('hidden');
     sheetModal.setAttribute('aria-hidden', 'true');
     openedSheetPlayerId = null;
@@ -357,7 +360,7 @@
       sheet.vitality["hp-temp"].value = clampedTemp;
 
       syncHpPopupInputs(sheet);
-      CS.bindings.markModalInteracted(player.id);
+      CS.bindings.markModalInteracted?.(player.id);
       CS.bindings.scheduleSheetSave(player);
       if (sheetContent) updateHeroChips(sheetContent, sheet);
     });
@@ -417,15 +420,6 @@
     first?.focus?.();
   }
 
-  // Expose some modal actions for other modules (close handlers / db popups wiring)
-  CS.modal = CS.modal || {};
-  Object.assign(CS.modal, {
-    openModal,
-    closeModal,
-    showHpPopup,
-    hideHpPopup,
-  });
-
   function hideHpPopup() {
     hpPopupEl?.classList.add('hidden');
   }
@@ -468,7 +462,7 @@
     sheet.vitality["hp-temp"].value = nextTemp;
 
     syncHpPopupInputs(sheet);
-    CS.bindings.markModalInteracted(player.id);
+    CS.bindings.markModalInteracted?.(player.id);
     CS.bindings.scheduleSheetSave(player);
     if (sheetContent) updateHeroChips(sheetContent, sheet);
   }
@@ -869,12 +863,12 @@ function bindCombatEditors(root, player, canEdit) {
 
     const force = !!opts.force;
     // Если пользователь сейчас редактирует что-то внутри модалки — не перерисовываем, чтобы не прыгал скролл/вкладка.
-    if (!force && player?.id && CS.bindings?.isModalBusy?.(player.id)) {
+    if (!force && player?.id && CS.bindings.isModalBusy?.(player.id)) {
       return;
     }
 
     // сохраняем текущую вкладку/скролл перед любым ререндером
-    CS.bindings.captureUiStateFromDom(player);
+    CS.bindings.captureUiStateFromDom?.(player);
 
     const myRole = ctx.getMyRole?.();
     const myId = ctx.getMyId?.();
@@ -884,8 +878,7 @@ function bindCombatEditors(root, player, canEdit) {
     sheetTitle.textContent = `Инфа: ${player.name}`;
     sheetSubtitle.textContent = `Владелец: ${player.ownerName || 'Unknown'} • Тип: ${player.isBase ? 'Основа' : '-'}`;
 
-    // ensure wrapper exists (moved to viewmodel module after splitting)
-    CS.viewmodel.ensurePlayerSheetWrapper(player);
+    CS.viewmodel.ensurePlayerSheetWrapper?.(player);
 
     sheetActions.innerHTML = '';
     const note = document.createElement('div');
@@ -912,7 +905,7 @@ function bindCombatEditors(root, player, canEdit) {
 
           // Мгновенно обновляем UI (не ждём round-trip через сервер)
           // и при этом не сбрасываем вкладку/скролл.
-          CS.bindings.markModalInteracted(player.id);
+          CS.bindings.markModalInteracted?.(player.id);
           renderSheetModal(player, { force: true });
 
           const tmp = document.createElement('div');
@@ -1072,13 +1065,13 @@ function bindCombatEditors(root, player, canEdit) {
     // отмечаем взаимодействие, чтобы state-обновления не ломали скролл
     const mainEl = sheetContent.querySelector('#sheet-main');
     mainEl?.addEventListener('scroll', () => {
-      CS.bindings.markModalInteracted(player.id);
+      CS.bindings.markModalInteracted?.(player.id);
       // и сохраняем текущий скролл в uiState
-      CS.bindings.captureUiStateFromDom(player);
+      CS.bindings.captureUiStateFromDom?.(player);
     }, { passive: true });
 
-    sheetContent.addEventListener('pointerdown', () => CS.bindings.markModalInteracted(player.id), { passive: true });
-    sheetContent.addEventListener('keydown', () => CS.bindings.markModalInteracted(player.id), { passive: true });
+    sheetContent.addEventListener('pointerdown', () => CS.bindings.markModalInteracted?.(player.id), { passive: true });
+    sheetContent.addEventListener('keydown', () => CS.bindings.markModalInteracted?.(player.id), { passive: true });
 
     CS.bindings.bindEditableInputs(sheetContent, player, canEdit);
     CS.db.bindLanguagesUi(sheetContent, player, canEdit);
@@ -1139,7 +1132,7 @@ function bindCombatEditors(root, player, canEdit) {
   // ================== PUBLIC API ==================
   function init(context) {
     ctx = context || null;
-    CS.db?.ensureWiredCloseHandlers?.();
+    ensureWiredCloseHandlers();
   }
 
   function open(player) {
