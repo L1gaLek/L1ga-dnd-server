@@ -42,7 +42,7 @@
     if (!uiStateByPlayerId.has(playerId)) {
       uiStateByPlayerId.set(playerId, { activeTab: "basic", scrollTopByTab: {}, lastInteractAt: 0 });
     }
-    return uiStateByPlayerId.CS.utils.get(playerId);
+    return uiStateByPlayerId.get(playerId);
   }
 
   function captureUiStateFromDom(player) {
@@ -134,7 +134,7 @@
     if (!player?.id || !ctx?.sendMessage) return;
 
     const key = player.id;
-    const prev = sheetSaveTimers.CS.utils.get(key);
+    const prev = sheetSaveTimers.get(key);
     if (prev) clearTimeout(prev);
 
     const t = setTimeout(() => {
