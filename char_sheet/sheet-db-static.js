@@ -514,4 +514,8 @@ function bindLanguagesUi(root, player, canEdit) {
   CS.db.showExhPopup = showExhPopup;
   CS.db.showCondPopup = showCondPopup;
 
+
+  // Also expose languages binder as global (backward-compat)
+  window.bindLanguagesUi = bindLanguagesUi;
+
 })();
