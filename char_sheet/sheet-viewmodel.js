@@ -661,5 +661,7 @@ const weapons = weaponsRaw
   CS.viewmodel.parseSpellsFromPlain = parseSpellsFromPlain;
   CS.viewmodel.createEmptySheet = createEmptySheet;
   CS.viewmodel.toViewModel = toViewModel;
+  // Used by sheet-modal.js (was global before splitting)
+  CS.viewmodel.ensurePlayerSheetWrapper = ensurePlayerSheetWrapper;
 
 })();
