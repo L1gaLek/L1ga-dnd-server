@@ -534,17 +534,30 @@ if (path === "proficiency" || path === "proficiencyCustom") {
   CS.bindings.bindEditableInputs = bindEditableInputs;
 
 
-  // Expose bindings helpers for other modules (backward-compat)
+
+  // Expose binding helpers for other modules (backward-compat)
   CS.bindings = CS.bindings || {};
   CS.bindings.captureUiStateFromDom = captureUiStateFromDom;
   CS.bindings.restoreUiStateToDom = restoreUiStateToDom;
   CS.bindings.isModalBusy = isModalBusy;
   CS.bindings.markModalInteracted = markModalInteracted;
 
+  CS.bindings.bindEditableInputs = bindEditableInputs;
+  CS.bindings.bindAbilityAndSkillEditors = bindAbilityAndSkillEditors;
+  CS.bindings.bindSaveProfDots = bindSaveProfDots;
+  CS.bindings.bindSkillBoostDots = bindSkillBoostDots;
+  CS.bindings.bindStatRollButtons = bindStatRollButtons;
+
   // Some modules still reference these as globals
   window.captureUiStateFromDom = captureUiStateFromDom;
   window.restoreUiStateToDom = restoreUiStateToDom;
   window.isModalBusy = isModalBusy;
   window.markModalInteracted = markModalInteracted;
+
+  window.bindEditableInputs = bindEditableInputs;
+  window.bindAbilityAndSkillEditors = bindAbilityAndSkillEditors;
+  window.bindSaveProfDots = bindSaveProfDots;
+  window.bindSkillBoostDots = bindSkillBoostDots;
+  window.bindStatRollButtons = bindStatRollButtons;
 
 })();
