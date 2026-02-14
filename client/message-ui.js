@@ -20,20 +20,32 @@ function handleMessage(msg) {
     const curMapId = String(state?.currentMapId || '').trim();
 
     if (myRole === 'GM') {
-      // Map-local GM NPCs/monsters: show only on their map.
-      if (ownerRole === 'GM' && !p.isBase && !p.isAlly) {
-        const pidMap = String(p?.mapId || '').trim();
-        if (pidMap && curMapId && pidMap !== curMapId) return false;
+      // GM view mode:
+      // - 'gm'     : show everything (with map-local scoping)
+      // - 'player' : treat visibility like a regular player
+      const gmView = String(state?.fog?.gmViewMode || 'gm');
+      if (gmView !== 'player') {
+        // Map-local GM NPCs/monsters: show only on their map.
+        if (ownerRole === 'GM' && !p.isBase && !p.isAlly) {
+          const pidMap = String(p?.mapId || '').trim();
+          if (pidMap && curMapId && pidMap !== curMapId) return false;
+        }
+        return true;
       }
-      return true;
+      // else: fall through to non-GM rules
     }
 
     // Non-GM:
-    // - GM-created non-allies are hidden by default.
-    // - If GM toggled "eye" (isPublic=true), show token + list entry, but without sensitive UI.
+    // - In exploration phase we KEEP GM-created non-allies in state (for discovery mechanics),
+    //   but UI will hide them until they are discovered by vision.
+    // - Outside exploration: GM-created non-allies are hidden by default,
+    //   and become visible only if GM toggled "eye" (isPublic=true).
     if (ownerRole === 'GM' && !p.isAlly) {
-      const pub = !!p.isPublic;
-      if (!pub) return false;
+      const phase = String(state?.phase || '').trim();
+      if (phase !== 'exploration') {
+        const pub = !!p.isPublic;
+        if (!pub) return false;
+      }
     }
 
     // Safety: if a GM-created map-local somehow leaked as visible, still gate by map.
@@ -205,6 +217,7 @@ loginDiv.style.display = 'none';
         if (!existingIds.has(id)) {
           el.remove();
           playerElements.delete(id);
+          try { window._fogLastKnown?.delete?.(String(id)); } catch {}
         }
       });
 
@@ -523,7 +536,33 @@ function updatePlayerList() {
       ul.appendChild(emptyLi);
     }
 
-    group.players.forEach(p => {
+    // In exploration phase, hide GM-created non-allies from list until discovered by vision.
+    // (Discovery memory is stored in window._fogLastKnown and updated by board rendering.)
+    const st = lastState || {};
+    const fog = st.fog || {};
+    const phase = String(st.phase || '').trim();
+    const asPlayerView = (String(myRole || '') !== 'GM') || (String(myRole || '') === 'GM' && String(fog.gmViewMode || 'gm') === 'player');
+
+    const listPlayers = group.players.filter(p => {
+      const ownerRole = getOwnerRoleForPlayerUI(p);
+      if (!(asPlayerView && phase === 'exploration' && ownerRole === 'GM' && !p.isAlly)) return true;
+
+      // discovered if we have last known OR currently visible
+      const known = !!window._fogLastKnown?.get?.(String(p.id));
+      if (known) return true;
+      try {
+        if (p.x === null || p.y === null) return false;
+        const size = Number(p.size) || 1;
+        const cx = (Number(p.x) || 0) + Math.floor((size - 1) / 2);
+        const cy = (Number(p.y) || 0) + Math.floor((size - 1) / 2);
+        const visible = !!window.FogWar?.isCellVisible?.(cx, cy);
+        return visible;
+      } catch {
+        return false;
+      }
+    });
+
+    listPlayers.forEach(p => {
       const li = document.createElement('li');
       li.className = 'player-list-item';
 
@@ -563,7 +602,9 @@ function updatePlayerList() {
 
       // GM visibility "eye" for GM-created non-allies (default hidden for others)
       const ownerRole = getOwnerRoleForPlayerUI(p);
-      if (myRole === 'GM' && ownerRole === 'GM' && !p.isAlly && !p.isBase) {
+      // GM visibility "eye" for GM-created non-allies.
+      // Requested: also show for "Основа" when it is NOT союзник.
+      if (myRole === 'GM' && ownerRole === 'GM' && !p.isAlly) {
         const eyeBtn = document.createElement('button');
         eyeBtn.type = 'button';
         eyeBtn.className = 'eye-btn';

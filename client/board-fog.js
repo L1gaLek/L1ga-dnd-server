@@ -46,9 +46,14 @@
       const st = this._lastState;
       if (!st || !st.fog || !st.fog.enabled) return true;
 
-      // GM always sees everything
+      // GM visibility depends on gmViewMode:
+      // - 'gm'     : GM sees everything (fog is just an overlay)
+      // - 'player' : GM sees like players
       try {
-        if (typeof myRole !== 'undefined' && String(myRole) === 'GM') return true;
+        if (typeof myRole !== 'undefined' && String(myRole) === 'GM') {
+          const gmView = String(st?.fog?.gmViewMode || 'gm');
+          if (gmView !== 'player') return true;
+        }
       } catch {}
 
       const w = Number(st.boardWidth) || 10;
@@ -185,8 +190,11 @@
     },
 
     _visionSources() {
-      // Sources: all player-owned tokens + GM-created allies.
-      // Players array already filtered by visibility rules on non-GM clients.
+      // Sources (party vision):
+      // - all non-GM owned tokens (party players)
+      // - GM-created allies
+      // IMPORTANT: GM-created non-allies MUST NOT reveal terrain for players.
+      // (they can still be discovered as targets, but do not grant vision)
       const sources = [];
       const st = this._lastState || {};
       const list = Array.isArray(st.players) ? st.players : (typeof players !== 'undefined' ? players : []);
@@ -199,11 +207,9 @@
         const isGmCreated = (ownerRole === 'GM');
 
         // Party vision sources:
-        // - non-GM created tokens always count (their own tokens)
-        // - GM-created tokens count if they are Ally OR Base OR explicitly made public (eye opened)
-        //   This matches the "eye" mechanic: public tokens are visible on board, so they should also
-        //   reveal terrain around them in dynamic fog.
-        if (!isGmCreated || !!p.isAlly || !!p.isBase || !!p.isPublic) {
+        // - non-GM tokens always count
+        // - GM tokens count ONLY if they are союзник
+        if (!isGmCreated || !!p.isAlly) {
           sources.push(p);
         }
       }
@@ -446,14 +452,15 @@
           if (typeof myRole === 'undefined' || String(myRole) !== 'GM') return;
           const enabled = !!document.getElementById('fog-enabled')?.checked;
           const mode = String(document.getElementById('fog-mode')?.value || 'manual');
+          const gmViewMode = String(document.getElementById('fog-gm-view')?.value || 'gm');
           const visionRadius = clampInt(Number(document.getElementById('fog-vision')?.value) || 8, 1, 60);
           const useWalls = !!document.getElementById('fog-use-walls')?.checked;
           const exploredEnabled = !!document.getElementById('fog-explored')?.checked;
-          sendMessage?.({ type: 'setFogSettings', enabled, mode, visionRadius, useWalls, exploredEnabled });
+          sendMessage?.({ type: 'setFogSettings', enabled, mode, gmViewMode, visionRadius, useWalls, exploredEnabled });
         } catch {}
       };
 
-      ['fog-enabled','fog-mode','fog-vision','fog-use-walls','fog-explored'].forEach(id => {
+      ['fog-enabled','fog-mode','fog-gm-view','fog-vision','fog-use-walls','fog-explored'].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         el.addEventListener('change', onSettingsChange);
@@ -486,6 +493,7 @@
 
       setChecked('fog-enabled', !!fog.enabled);
       setValue('fog-mode', (fog.mode === 'dynamic' ? 'dynamic' : 'manual'));
+      setValue('fog-gm-view', (String(fog.gmViewMode || 'gm') === 'player' ? 'player' : 'gm'));
       setValue('fog-vision', Number(fog.visionRadius) || 8);
       setChecked('fog-use-walls', fog.useWalls !== false);
       setChecked('fog-explored', fog.exploredEnabled !== false);

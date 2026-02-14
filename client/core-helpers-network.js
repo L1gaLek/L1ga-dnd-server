@@ -1224,6 +1224,10 @@ else if (type === "addWall") {
           if (Number.isFinite(Number(msg.visionRadius))) f.visionRadius = clamp(Number(msg.visionRadius), 1, 60);
           if (typeof msg.useWalls === 'boolean') f.useWalls = msg.useWalls;
           if (typeof msg.exploredEnabled === 'boolean') f.exploredEnabled = msg.exploredEnabled;
+          // GM view mode:
+          // - 'gm'     : GM sees full board, fog is an overlay showing what is revealed
+          // - 'player' : GM sees exactly what players see
+          if (msg.gmViewMode === 'gm' || msg.gmViewMode === 'player') f.gmViewMode = msg.gmViewMode;
           if (!Array.isArray(f.manualStamps)) f.manualStamps = [];
           if (!Array.isArray(f.explored)) f.explored = [];
           logEventToState(next, `Туман войны: ${f.enabled ? 'ВКЛ' : 'ВЫКЛ'} (${f.mode === 'dynamic' ? 'динамический' : 'ручной'})`);

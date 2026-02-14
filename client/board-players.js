@@ -311,6 +311,11 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ================== PLAYER POSITION ==================
+// Exploration discovery memory for GM-created non-allies.
+// Non-GM (and GM in "Как у игрока") will see such tokens only when their vision reveals the cell.
+// After discovery, token remains at last known position until rediscovered.
+window._fogLastKnown = window._fogLastKnown || new Map();
+
 function setPlayerPosition(player) {
   let el = playerElements.get(player.id);
 
@@ -329,6 +334,12 @@ function setPlayerPosition(player) {
       try {
         if (window.FogWar?.isEnabled?.() && !window.FogWar?.canInteractWithToken?.(player)) return;
       } catch {}
+
+      // If this is a "ghost" (last known) token in exploration, do not allow selecting it.
+      try {
+        if (String(el?.dataset?.fogGhost || '') === '1') return;
+      } catch {}
+
       if (!editEnvironment) {
         if (selectedPlayer) {
           const prev = playerElements.get(selectedPlayer.id);
@@ -369,6 +380,53 @@ function setPlayerPosition(player) {
   el.style.backgroundColor = player.color;
   el.style.width = `${player.size * 50}px`;
   el.style.height = `${player.size * 50}px`;
+
+  // ================== Visibility / discovery rules for exploration ==================
+  // Treat GM in "Как у игрока" the same as a normal player.
+  const st = (typeof lastState !== 'undefined') ? lastState : null;
+  const fog = st?.fog || {};
+  const phase = String(st?.phase || '').trim();
+  const asPlayerView = (String(myRole || '') !== 'GM') || (String(myRole || '') === 'GM' && String(fog.gmViewMode || 'gm') === 'player');
+  const ownerRole = String(player?.ownerRole || '').trim();
+  const isGmHidden = (ownerRole === 'GM' && !player.isAlly);
+
+  // Reset ghost flag by default
+  try { el.dataset.fogGhost = ''; } catch {}
+
+  // In exploration phase: GM-created non-allies are "discoverable" by vision.
+  // They are not shown until the cell becomes visible, then persist as last known.
+  if (asPlayerView && isGmHidden && phase === 'exploration' && window.FogWar?.isEnabled?.() && String(fog.mode || '') === 'dynamic') {
+    // If token not placed, hide
+    if (player.x === null || player.y === null) {
+      el.style.display = 'none';
+      updateHpBar(player, el);
+      return;
+    }
+
+    const size = Number(player?.size) || 1;
+    const cx = (Number(player.x) || 0) + Math.floor((size - 1) / 2);
+    const cy = (Number(player.y) || 0) + Math.floor((size - 1) / 2);
+    const visibleNow = !!window.FogWar?.isCellVisible?.(cx, cy);
+
+    const key = String(player.id);
+    if (visibleNow) {
+      window._fogLastKnown.set(key, { x: Number(player.x) || 0, y: Number(player.y) || 0 });
+    }
+
+    const known = window._fogLastKnown.get(key);
+    if (!visibleNow && !known) {
+      // not discovered yet
+      el.style.display = 'none';
+      updateHpBar(player, el);
+      return;
+    }
+
+    // render at real position if visible; otherwise at last known
+    if (!visibleNow && known) {
+      try { el.dataset.fogGhost = '1'; } catch {}
+      player = Object.assign({}, player, { x: known.x, y: known.y });
+    }
+  }
 
   if (player.x === null || player.y === null) {
     el.style.display = 'none';
