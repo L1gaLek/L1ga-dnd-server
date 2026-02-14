@@ -134,12 +134,17 @@
       for (const s of stamps) {
         const cx = Math.round(Number(s?.x) || 0);
         const cy = Math.round(Number(s?.y) || 0);
+        // Brush radius is in "cells count" like:
+        // r=1 => only the clicked cell
+        // r=2 => adds 1 cell each side (3x3)
+        // r=3 => 5x5, etc.
         const r = Math.max(1, Math.round(Number(s?.r) || 1));
+        const spread = Math.max(0, r - 1);
         const mode = (String(s?.mode || 'reveal') === 'hide') ? 2 : 1;
 
-        for (let dy = -r; dy <= r; dy++) {
-          for (let dx = -r; dx <= r; dx++) {
-            if (dx * dx + dy * dy > r * r) continue;
+        // Square brush (Chebyshev radius), matching user's expectation.
+        for (let dy = -spread; dy <= spread; dy++) {
+          for (let dx = -spread; dx <= spread; dx++) {
             const x = cx + dx;
             const y = cy + dy;
             if (x < 0 || y < 0 || x >= w || y >= h) continue;
@@ -195,9 +200,10 @@
 
         // Party vision sources:
         // - non-GM created tokens always count (their own tokens)
-        // - GM-created count only if isAlly
-        if (!isGmCreated || !!p.isAlly || !!p.isBase) {
-          // Base also counts for GM.
+        // - GM-created tokens count if they are Ally OR Base OR explicitly made public (eye opened)
+        //   This matches the "eye" mechanic: public tokens are visible on board, so they should also
+        //   reveal terrain around them in dynamic fog.
+        if (!isGmCreated || !!p.isAlly || !!p.isBase || !!p.isPublic) {
           sources.push(p);
         }
       }
@@ -300,16 +306,9 @@
       this._canvas.style.display = enabled ? 'block' : 'none';
       if (!enabled) return;
 
-      // GM: can optionally still see overlay? by default: GM sees no fog
-      try {
-        if (typeof myRole !== 'undefined' && String(myRole) === 'GM') {
-          // show overlay only while painting in manual mode and enabled
-          if (fog.mode !== 'manual') {
-            this._canvas.style.display = 'none';
-            return;
-          }
-        }
-      } catch {}
+      // IMPORTANT: show fog for GM in BOTH modes.
+      // This lets GM verify dynamic mode visually (as expected).
+      // GM interactions with tokens are still unrestricted by canMoveToCell/canInteractWithToken.
 
       ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
 
