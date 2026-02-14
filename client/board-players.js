@@ -314,9 +314,22 @@ function setPlayerPosition(player) {
   if (!el) {
     el = document.createElement('div');
     el.classList.add('player');
-    el.textContent = player.name?.[0] || '?';
+    // показываем полное имя (а не только первую букву)
+    const fullName = String(player.name || '').trim();
+    el.textContent = fullName || '?';
+    el.title = fullName || '';
     el.style.backgroundColor = player.color;
     el.style.position = 'absolute';
+    // чтобы длинные имена помещались в токен
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.textAlign = 'center';
+    el.style.fontSize = '11px';
+    el.style.lineHeight = '1.05';
+    el.style.padding = '2px';
+    el.style.boxSizing = 'border-box';
+    el.style.wordBreak = 'break-word';
 
     el.addEventListener('mousedown', () => {
       if (!editEnvironment) {
@@ -332,6 +345,17 @@ function setPlayerPosition(player) {
     // двойной клик — мини-окно со статами
     el.addEventListener('dblclick', (e) => {
       e.stopPropagation();
+
+      // ВАЖНО: при открытии мини-окна убираем выделение,
+      // чтобы случайный клик по полю не перемещал персонажа.
+      try {
+        if (selectedPlayer && String(selectedPlayer.id) === String(player.id)) {
+          const prev = playerElements.get(selectedPlayer.id);
+          if (prev) prev.classList.remove('selected');
+          selectedPlayer = null;
+        }
+      } catch {}
+
       // block for GM-created public NPCs
       try {
         if (typeof canViewSensitiveInfo === 'function' && !canViewSensitiveInfo(player)) return;
@@ -344,7 +368,9 @@ function setPlayerPosition(player) {
     player.element = el;
   }
 
-  el.textContent = player.name ? player.name[0] : '?';
+  const fullName2 = String(player.name || '').trim();
+  el.textContent = fullName2 || '?';
+  el.title = fullName2 || '';
   el.style.backgroundColor = player.color;
   el.style.width = `${player.size * 50}px`;
   el.style.height = `${player.size * 50}px`;

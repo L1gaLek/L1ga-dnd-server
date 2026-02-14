@@ -562,8 +562,9 @@ function updatePlayerList() {
       }
 
       // GM visibility "eye" for GM-created non-allies (default hidden for others)
+      // IMPORTANT: also show the eye for GM's "Основа" (user requested).
       const ownerRole = getOwnerRoleForPlayerUI(p);
-      if (myRole === 'GM' && ownerRole === 'GM' && !p.isAlly && !p.isBase) {
+      if (myRole === 'GM' && ownerRole === 'GM' && !p.isAlly) {
         const eyeBtn = document.createElement('button');
         eyeBtn.type = 'button';
         eyeBtn.className = 'eye-btn';
