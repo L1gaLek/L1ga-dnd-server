@@ -29,11 +29,6 @@
       } catch {}
       if (!this.isEnabled()) return true;
       const p = player || {};
-      // Always allow a user to interact with their own token, even if it's currently under fog.
-      // Otherwise a player can get "stuck" if their token becomes hidden by explored/fog logic.
-      try {
-        if (typeof myId !== 'undefined' && String(p.ownerId || '') && String(p.ownerId) === String(myId)) return true;
-      } catch {}
       if (p.x === null || p.y === null || typeof p.x === 'undefined' || typeof p.y === 'undefined') return true;
       return this.isCellVisible(Number(p.x) || 0, Number(p.y) || 0);
     },
@@ -43,10 +38,9 @@
         if (typeof myRole !== 'undefined' && String(myRole) === 'GM') return true;
       } catch {}
       if (!this.isEnabled()) return true;
-      // IMPORTANT: do NOT block movement into fog.
-      // In "Исследование" players should be able to move even if the destination isn't revealed yet.
-      // Visibility affects what they see, not where they can step.
-      return true;
+      // Require destination to be visible.
+      // For multi-size tokens, require top-left visible (simple + consistent with movement model)
+      return this.isCellVisible(Number(x) || 0, Number(y) || 0);
     },
 
     isCellVisible(x, y) {
@@ -434,9 +428,8 @@
         const isGm = (typeof myRole !== 'undefined' && String(myRole) === 'GM');
         const gmView = String(fog?.gmViewMode || 'gm');
         if (isGm && gmView !== 'player' && String(fog.mode || '') === 'dynamic' && this._dynNpcVisible && this._dynNpcVisible.length === wCells * hCells) {
-          // Очень светлый оттенок (почти белый) с еле заметным красным подтоном.
-          // Делает обзор ГМ-персонажей менее "красным", но всё ещё различимым.
-          ctx.fillStyle = 'rgba(255,250,250,0.16)';
+          // Прозрачно-красный обзор для игроков ГМ (NPC, не союзники)
+          ctx.fillStyle = 'rgba(255,0,0,0.16)';
           for (let i = 0; i < this._dynNpcVisible.length; i++) {
             if (this._dynNpcVisible[i] !== 1) continue;
             const x = i % wCells;
