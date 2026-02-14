@@ -61,6 +61,14 @@
   width: 120px;
 }
 
+/* "Монстры SRD" внизу рамки "Управление игроками" */
+#player-management .pm-monsters-btn{
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  font-weight: 700;
+}
+
 #action-log h3,
 #player-management h3,
 #player-list-container h3 {
@@ -191,8 +199,8 @@
 
   border: 1px solid #444;
   border-radius: 4px;
-  /* чуть шире внутренние отступы — кнопки визуально не упираются в границы */
-  padding: 6px 8px;
+  /* чуть шире внутренние отступы — карточка немного "выпирает" относительно кнопок */
+  padding: 6px 12px;
   margin-bottom: 6px;
 
   display: flex;
@@ -216,7 +224,15 @@
   gap: 4px;
   flex-shrink: 0;
   /* чтобы рамка карточки чуть выступала относительно кнопок */
-  padding: 0 3px;
+  padding: 0 2px;
+}
+
+/* кнопка-глаз (видимость GM NPC для игроков) */
+.eye-btn{
+  min-width: 34px;
+  text-align: center;
+  padding: 2px 6px;
+  line-height: 14px;
 }
 
 .player-actions-top{
