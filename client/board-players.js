@@ -316,6 +316,29 @@ document.addEventListener('keydown', (e) => {
 // After discovery, token remains at last known position until rediscovered.
 window._fogLastKnown = window._fogLastKnown || new Map();
 
+// Helpers used by exploration discovery.
+function getOwnerRoleForToken(p) {
+  const direct = String(p?.ownerRole || '').trim();
+  if (direct) return direct;
+  try {
+    // message-ui.js maintains usersById (Map) in this project
+    if (typeof usersById !== 'undefined' && p?.ownerId) {
+      const u = usersById.get(String(p.ownerId));
+      return String(u?.role || '').trim();
+    }
+  } catch {}
+  return '';
+}
+
+function getCurrentMapIdSafe() {
+  try {
+    if (typeof lastState !== 'undefined' && lastState) {
+      return String(lastState.activeMapId || lastState.mapId || lastState.currentMapId || 'map');
+    }
+  } catch {}
+  return 'map';
+}
+
 function setPlayerPosition(player) {
   let el = playerElements.get(player.id);
 
@@ -545,15 +568,8 @@ board.addEventListener('click', e => {
   if (x + selectedPlayer.size > boardWidth) x = boardWidth - selectedPlayer.size;
   if (y + selectedPlayer.size > boardHeight) y = boardHeight - selectedPlayer.size;
 
-  // Fog of war: block movement into hidden cells for non-GM
-  try {
-    if (window.FogWar?.isEnabled?.() && !window.FogWar?.canMoveToCell?.(x, y, selectedPlayer)) {
-      const el = playerElements.get(selectedPlayer.id);
-      if (el) el.classList.remove('selected');
-      selectedPlayer = null;
-      return;
-    }
-  } catch {}
+  // Важно: движение НЕ должно блокироваться туманом войны.
+  // Туман влияет на видимость/обнаружение, но не должен запрещать шаги.
 
   // быстрый локальный чек (сервер всё равно проверит)
   const size = Number(selectedPlayer.size) || 1;
