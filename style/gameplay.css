@@ -291,9 +291,8 @@
 /* Кнопка "Бросить" занимает остаток строки после количества */
 .dice-viz-btn--roll{
   flex: 1 1 auto;
-  min-width: 80px;
-  padding: 6px 8px;     /* чуть компактнее, чтобы точно влезала */
-  font-size: 11px;
+  min-width: 76px;
+  padding: 6px 8px;      /* компактнее, чтобы точно не выпирала */
 }
 
 /* ===== Dark dropdown (options list) ===== */
