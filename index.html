@@ -123,6 +123,8 @@
           </div>
           <button id="add-player">Добавить</button>
         </div>
+
+        <button id="open-monsters" class="pm-monsters-btn" type="button" title="Открыть библиотеку монстров SRD 5.1 (CC BY 4.0)">Монстры SRD</button>
       </div>
     </div>
 
@@ -264,8 +266,6 @@
             <button id="save-campaign" type="button">Сохранить кампанию</button>
             <button id="load-campaign" type="button">Загрузить кампанию</button>
 
-            <button id="open-monsters" type="button" title="Открыть библиотеку монстров SRD 5.1 (CC BY 4.0)">Монстры SRD</button>
-
             <button id="clear-board">Очистить поле</button>
             <button id="reset-game">Сбросить игру полностью</button>
           </div>
@@ -365,22 +365,20 @@
   <script src="controlbox.js"></script>
   <script src="monsters-library.js"></script>
 
- <!-- Client scripts (split from former client.js) -->
+  <!-- Client scripts (split from former client.js) -->
   <script src="client/dom-and-setup.js"></script>
   <script src="client/message-ui.js"></script>
   <script src="client/board-players.js"></script>
   <script src="client/gameplay-ui.js"></script>
   <script src="client/core-helpers-network.js"></script>
   <script src="client/rooms-controlbox.js"></script>
-  <!-- Character sheet (split from info-dnd-player.js) -->
-  <script src="char_sheet/sheet-utils.js"></script>
-  <script src="char_sheet/sheet-saved-bases.js"></script>
-  
-<script src="char_sheet/sheet-modal-core.js"></script>
-<script src="char_sheet/sheet-modal-popups.js"></script>
-<script src="char_sheet/sheet-modal-data.js"></script>
-<script src="char_sheet/sheet-modal-bindings.js"></script>
-<script src="char_sheet/sheet-modal-render.js"></script>
+
+  <script src="char_sheet/sheet-viewmodel.js" defer></script>
+  <script src="char_sheet/sheet-bindings-core.js" defer></script>
+  <script src="char_sheet/sheet-db-static.js" defer></script>
+  <script src="char_sheet/sheet-tab-inventory-and-notes.js" defer></script>
+  <script src="char_sheet/sheet-tab-spells.js" defer></script>
+  <script src="char_sheet/sheet-modal.js" defer></script>
 
 </body>
 </html>
