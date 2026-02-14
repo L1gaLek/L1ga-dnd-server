@@ -28,25 +28,18 @@ function handleMessage(msg) {
       return true;
     }
 
-    // Non-GM: GM-created are visible only if:
-    // - ally/base: always visible
-    // - otherwise: only when GM opened the "eye" (gmPublic)
-    if (ownerRole === 'GM') {
-      if (p.isAlly || p.isBase) return true;
-      if (!p.gmPublic) return false;
+    // Non-GM:
+    // - GM-created non-allies are hidden by default.
+    // - If GM toggled "eye" (isPublic=true), show token + list entry, but without sensitive UI.
+    if (ownerRole === 'GM' && !p.isAlly) {
+      const pub = !!p.isPublic;
+      if (!pub) return false;
     }
 
-    // Map-local gate (GM NPCs/monsters are scoped per map unless ally/base).
+    // Safety: if a GM-created map-local somehow leaked as visible, still gate by map.
     const pidMap = String(p?.mapId || '').trim();
-    if (ownerRole === 'GM' && pidMap && curMapId && pidMap !== curMapId && !p.isAlly && !p.isBase) return false;
+    if (ownerRole === 'GM' && pidMap && curMapId && pidMap !== curMapId && !p.isAlly) return false;
     return true;
-  }
-
-  function canAccessSensitivePlayerUI(p) {
-    if (!p) return false;
-    if (myRole === 'GM') return true;
-    if (String(p.ownerId) === String(myId)) return true;
-    return !!p.isAlly; // allies are "trusted" for HP / sheet / dblclick mini
   }
 
 // ===== Rooms lobby messages =====
@@ -568,6 +561,27 @@ function updatePlayerList() {
         nameWrap.appendChild(allyBadge);
       }
 
+      // GM visibility "eye" for GM-created non-allies (default hidden for others)
+      const ownerRole = getOwnerRoleForPlayerUI(p);
+      if (myRole === 'GM' && ownerRole === 'GM' && !p.isAlly && !p.isBase) {
+        const eyeBtn = document.createElement('button');
+        eyeBtn.type = 'button';
+        eyeBtn.className = 'eye-btn';
+        const isOpen = !!p.isPublic;
+        eyeBtn.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
+        eyeBtn.title = isOpen ? 'Видно игрокам' : 'Скрыто от игроков';
+        eyeBtn.textContent = isOpen ? '👁' : '🙈';
+        eyeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const next = !p.isPublic;
+          // optimistic
+          p.isPublic = next;
+          sendMessage({ type: 'setPlayerPublic', id: p.id, isPublic: next });
+          updatePlayerList();
+        });
+        nameWrap.appendChild(eyeBtn);
+      }
+
       li.appendChild(nameWrap);
 
       const actions = document.createElement('div');
@@ -576,16 +590,17 @@ function updatePlayerList() {
       // ===== Верхняя кнопка "Лист персонажа" (на всю ширину карточки) =====
       const topActions = document.createElement('div');
       topActions.className = 'player-actions-top';
-      // Players can open sheet only for: their own chars, allies, or if they are GM.
-      if (!p.isMonster && canAccessSensitivePlayerUI(p)) {
-        const sheetBtn = document.createElement('button');
-        sheetBtn.textContent = 'Лист персонажа';
-        sheetBtn.className = 'sheet-btn';
-        sheetBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          window.InfoModal?.open?.(p);
-        });
-        topActions.appendChild(sheetBtn);
+      if (!p.isMonster) {
+        if (canViewSensitiveInfo(p)) {
+          const sheetBtn = document.createElement('button');
+          sheetBtn.textContent = 'Лист персонажа';
+          sheetBtn.className = 'sheet-btn';
+          sheetBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.InfoModal?.open?.(p);
+          });
+          topActions.appendChild(sheetBtn);
+        }
       }
       actions.appendChild(topActions);
 
@@ -653,24 +668,6 @@ function updatePlayerList() {
         });
         midRow.appendChild(colorInput);
       }
-
-      // "Глаз" видимости (только для ГМ, и только для его собственных не-основа/не-союзник)
-      if (myRole === 'GM') {
-        const ownerRole = getOwnerRoleForPlayer(p);
-        const isMine = String(p.ownerId) === String(myId);
-        if (ownerRole === 'GM' && isMine && !p.isBase && !p.isAlly) {
-          const eyeBtn = document.createElement('button');
-          eyeBtn.classList.add('mini-action-btn','mini-action-btn--secondary','eye-btn');
-          const opened = !!p.gmPublic;
-          eyeBtn.textContent = opened ? '👁' : '🙈';
-          eyeBtn.title = opened ? 'Видно игрокам (без HP/листа/двойного клика)' : 'Скрыто от игроков';
-          eyeBtn.onclick = (e) => {
-            e.stopPropagation();
-            sendMessage({ type: 'setGmPublic', id: p.id, gmPublic: !opened });
-          };
-          midRow.appendChild(eyeBtn);
-        }
-      }
       // Быстрые кнопки: "С поля" / "Удалить" — в один ряд с размером/цветом
       if (myRole === "GM" || p.ownerId === myId) {
         const removeFromBoardBtn = document.createElement('button');
@@ -721,5 +718,25 @@ function updatePlayerList() {
     ownerLi.appendChild(ul);
     playerList.appendChild(ownerLi);
   });
+}
+
+// ================== UI PERMISSIONS HELPERS ==================
+function getOwnerRoleForPlayerUI(p) {
+  const direct = String(p?.ownerRole || '').trim();
+  if (direct) return direct;
+  const u = p?.ownerId ? usersById.get(String(p.ownerId)) : null;
+  return String(u?.role || '').trim();
+}
+
+// "Sensitive" = sheet modal, HP, dblclick mini.
+// We keep existing behavior for non-GM-owned characters, but restrict GM-created public NPCs.
+function canViewSensitiveInfo(p) {
+  if (!p) return false;
+  if (myRole === 'GM') return true;
+  if (String(p.ownerId || '') === String(myId || '')) return true;
+  if (p.isAlly) return true;
+  const ownerRole = getOwnerRoleForPlayerUI(p);
+  if (ownerRole === 'GM') return false;
+  return true;
 }
 

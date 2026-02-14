@@ -64,17 +64,6 @@ function getQuickSheetStats(player) {
   return { hpMax, hpCur, ac, speed, lvl, stats };
 }
 
-// Sensitive UI (HP bar + dblclick mini + sheet open) must be available only for:
-// - GM
-// - owner of the character
-// - allies (GM flagged as ally)
-function canAccessSensitivePlayerUI(player) {
-  if (!player) return false;
-  if (myRole === 'GM') return true;
-  if (String(player.ownerId) === String(myId)) return true;
-  return !!player.isAlly;
-}
-
 function ensureSheetPath(sheetObj, path) {
   const parts = String(path || '').split('.').filter(Boolean);
   let cur = sheetObj;
@@ -107,13 +96,16 @@ function upsertSheetNumber(player, path, value) {
 function updateHpBar(player, tokenEl) {
   const pid = String(player?.id || '');
   if (!pid) return;
-  let bar = hpBarElements.get(pid);
 
-  // If current user must NOT see HP for this token — just hide the bar.
-  if (!canAccessSensitivePlayerUI(player)) {
-    if (bar) bar.style.display = 'none';
-    return;
-  }
+  // Hide HP bar if user has no access to sensitive info (GM-created public NPCs)
+  try {
+    if (typeof canViewSensitiveInfo === 'function' && !canViewSensitiveInfo(player)) {
+      const existing = hpBarElements.get(pid);
+      if (existing) existing.style.display = 'none';
+      return;
+    }
+  } catch {}
+  let bar = hpBarElements.get(pid);
 
   const size = Number(player?.size) || 1;
 
@@ -190,7 +182,11 @@ function positionTokenMini(tokenEl) {
 function openTokenMini(playerId) {
   const p = players.find(pp => String(pp?.id) === String(playerId));
   if (!p) return;
-  if (!canAccessSensitivePlayerUI(p)) return;
+
+  // No mini popup for users without access
+  try {
+    if (typeof canViewSensitiveInfo === 'function' && !canViewSensitiveInfo(p)) return;
+  } catch {}
   const tokenEl = playerElements.get(p.id);
   if (!tokenEl || tokenEl.style.display === 'none') return;
 
@@ -287,6 +283,10 @@ function openTokenMini(playerId) {
   hpDeltaPlus?.addEventListener('click', () => applyDelta(1));
 
   sheetBtn?.addEventListener('click', () => {
+    // extra safety
+    try {
+      if (typeof canViewSensitiveInfo === 'function' && !canViewSensitiveInfo(p)) return;
+    } catch {}
     window.InfoModal?.open?.(p);
   });
 
@@ -332,6 +332,10 @@ function setPlayerPosition(player) {
     // двойной клик — мини-окно со статами
     el.addEventListener('dblclick', (e) => {
       e.stopPropagation();
+      // block for GM-created public NPCs
+      try {
+        if (typeof canViewSensitiveInfo === 'function' && !canViewSensitiveInfo(player)) return;
+      } catch {}
       openTokenMini(player.id);
     });
 
