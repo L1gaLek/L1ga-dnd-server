@@ -406,7 +406,8 @@ function setPlayerPosition(player) {
     const size = Number(player?.size) || 1;
     const cx = (Number(player.x) || 0) + Math.floor((size - 1) / 2);
     const cy = (Number(player.y) || 0) + Math.floor((size - 1) / 2);
-    const visibleNow = !!window.FogWar?.isCellVisible?.(cx, cy);
+    // In exploration, discovery depends ONLY on dynamic vision (manual reveal should NOT auto-detect hidden GM tokens).
+    const visibleNow = !!window.FogWar?.isCellVisibleDynamicOnly?.(cx, cy);
 
     const key = String(player.id);
     if (visibleNow) {
@@ -414,6 +415,21 @@ function setPlayerPosition(player) {
     }
 
     const known = window._fogLastKnown.get(key);
+    // If players can currently SEE the last-known cell (dynamic vision), but the token isn't there anymore,
+    // then the "ghost" must disappear (they verify it's gone).
+    if (!visibleNow && known) {
+      const kSize = Number(player?.size) || 1;
+      const kcx = (Number(known.x) || 0) + Math.floor((kSize - 1) / 2);
+      const kcy = (Number(known.y) || 0) + Math.floor((kSize - 1) / 2);
+      const lastCellVisibleNow = !!window.FogWar?.isCellVisibleDynamicOnly?.(kcx, kcy);
+      const tokenStillOnLastKnown = (Number(player.x) === Number(known.x) && Number(player.y) === Number(known.y));
+      if (lastCellVisibleNow && !tokenStillOnLastKnown) {
+        window._fogLastKnown.delete(key);
+        el.style.display = 'none';
+        updateHpBar(player, el);
+        return;
+      }
+    }
     if (!visibleNow && !known) {
       // not discovered yet
       el.style.display = 'none';

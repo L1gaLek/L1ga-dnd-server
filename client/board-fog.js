@@ -12,7 +12,8 @@
     _manualGrid: null, // Uint8Array (1=reveal, 0=hide) used as overrides on top of manualBase
     _manualKey: '',
     _dynKey: '',
-    _dynVisible: null, // Uint8Array
+    _dynVisible: null, // Uint8Array (party visibility used for players)
+    _dynNpcVisible: null, // Uint8Array (GM-created non-allies vision, GM-only overlay)
     _exploredSet: new Set(),
     _pendingExploredSync: null,
 
@@ -80,6 +81,28 @@
       // dynamic mode: manualReveal OR dynamicVisible
       const dyn = (this._dynVisible && this._dynVisible.length === w * h) ? (this._dynVisible[idx] === 1) : false;
       return revealed || dyn;
+    },
+
+    // Dynamic-only visibility (ignores manual stamps/base).
+    // Used for "исследование" discovery logic.
+    isCellVisibleDynamicOnly(x, y) {
+      const st = this._lastState;
+      if (!st || !st.fog || !st.fog.enabled) return true;
+
+      // GM in gmViewMode != player is effectively omniscient.
+      try {
+        if (typeof myRole !== 'undefined' && String(myRole) === 'GM') {
+          const gmView = String(st?.fog?.gmViewMode || 'gm');
+          if (gmView !== 'player') return true;
+        }
+      } catch {}
+
+      const w = Number(st.boardWidth) || 10;
+      const h = Number(st.boardHeight) || 10;
+      if (x < 0 || y < 0 || x >= w || y >= h) return false;
+      if (String(st?.fog?.mode || '') !== 'dynamic') return true;
+      const idx = y * w + x;
+      return (this._dynVisible && this._dynVisible.length === w * h) ? (this._dynVisible[idx] === 1) : false;
     },
 
     onBoardRendered(state) {
@@ -216,10 +239,27 @@
       return sources;
     },
 
+    _gmHiddenSources() {
+      // GM-created, non-allies (NPCs). These DO NOT reveal terrain to players,
+      // but GM wants to see their FOV in a different color.
+      const sources = [];
+      const st = this._lastState || {};
+      const list = Array.isArray(st.players) ? st.players : (typeof players !== 'undefined' ? players : []);
+      for (const p of list) {
+        if (!p) continue;
+        if (p.x === null || p.y === null || typeof p.x === 'undefined' || typeof p.y === 'undefined') continue;
+        const ownerRole = String(p.ownerRole || '').trim();
+        const isGmCreated = (ownerRole === 'GM');
+        if (isGmCreated && !p.isAlly) sources.push(p);
+      }
+      return sources;
+    },
+
     _maybeRecomputeDynamic() {
       const st = this._lastState;
       if (!st || !st.fog || !st.fog.enabled || st.fog.mode !== 'dynamic') {
         this._dynVisible = null;
+        this._dynNpcVisible = null;
         this._dynKey = '';
         return;
       }
@@ -230,11 +270,13 @@
 
       // Key: positions + walls count + radius
       const sources = this._visionSources();
+      const npcSources = this._gmHiddenSources();
       const walls = Array.isArray(st.walls) ? st.walls : [];
-      const key = `${w}x${h}|r${Number(fog.visionRadius) || 8}|walls${walls.length}|src${sources.map(p => `${p.id}:${p.x},${p.y},${p.size||1}`).join(';')}`;
+      const key = `${w}x${h}|r${Number(fog.visionRadius) || 8}|walls${walls.length}|src${sources.map(p => `${p.id}:${p.x},${p.y},${p.size||1}`).join(';')}|npc${npcSources.map(p => `${p.id}:${p.x},${p.y},${p.size||1}`).join(';')}`;
       if (key === this._dynKey && this._dynVisible) return;
 
       const visible = new Uint8Array(w * h);
+      const npcVisible = new Uint8Array(w * h);
       const wallSet = this._wallsSet();
       const radius = clampInt(Number(fog.visionRadius) || 8, 1, 60);
       const useWalls = (fog.useWalls !== false);
@@ -264,7 +306,32 @@
         }
       }
 
+      // GM-created non-ally FOV (GM-only overlay)
+      for (const src of npcSources) {
+        const size = Number(src.size) || 1;
+        const ox = clampInt((Number(src.x) || 0) + Math.floor((size - 1) / 2), 0, w - 1);
+        const oy = clampInt((Number(src.y) || 0) + Math.floor((size - 1) / 2), 0, h - 1);
+
+        const minX = Math.max(0, ox - radius);
+        const maxX = Math.min(w - 1, ox + radius);
+        const minY = Math.max(0, oy - radius);
+        const maxY = Math.min(h - 1, oy + radius);
+
+        for (let y = minY; y <= maxY; y++) {
+          for (let x = minX; x <= maxX; x++) {
+            const dx = x - ox;
+            const dy = y - oy;
+            if (dx * dx + dy * dy > radius * radius) continue;
+            if (useWalls) {
+              if (!hasLineOfSightCells(ox, oy, x, y, wallSet)) continue;
+            }
+            npcVisible[y * w + x] = 1;
+          }
+        }
+      }
+
       this._dynVisible = visible;
+      this._dynNpcVisible = npcVisible;
       this._dynKey = key;
 
       // Update explored (GM is authority)
@@ -355,6 +422,21 @@
           ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
         }
       }
+
+      // GM-only overlay: show FOV for GM-created non-allies in red tint (dynamic mode only).
+      try {
+        const isGm = (typeof myRole !== 'undefined' && String(myRole) === 'GM');
+        const gmView = String(fog?.gmViewMode || 'gm');
+        if (isGm && gmView !== 'player' && String(fog.mode || '') === 'dynamic' && this._dynNpcVisible && this._dynNpcVisible.length === wCells * hCells) {
+          ctx.fillStyle = 'rgba(255,0,0,0.18)';
+          for (let i = 0; i < this._dynNpcVisible.length; i++) {
+            if (this._dynNpcVisible[i] !== 1) continue;
+            const x = i % wCells;
+            const y = Math.floor(i / wCells);
+            ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+          }
+        }
+      } catch {}
     },
 
     _wireManualPainting(canvas) {
