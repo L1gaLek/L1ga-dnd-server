@@ -24,6 +24,9 @@ function renderBoard(state) {
   }
 
   players.forEach(p => setPlayerPosition(p));
+
+  // Fog of war overlay needs to match board size and state.
+  try { window.FogWar?.onBoardRendered?.(state); } catch {}
 }
 
 // ================== SHEET HELPERS (for HP bar + mini popup) ==================
@@ -314,24 +317,18 @@ function setPlayerPosition(player) {
   if (!el) {
     el = document.createElement('div');
     el.classList.add('player');
-    // показываем полное имя (а не только первую букву)
-    const fullName = String(player.name || '').trim();
-    el.textContent = fullName || '?';
-    el.title = fullName || '';
+    // Full name label (instead of first letter)
+    el.innerHTML = `<span class="token-label"></span>`;
+    const lbl0 = el.querySelector('.token-label');
+    if (lbl0) lbl0.textContent = String(player.name || '?');
     el.style.backgroundColor = player.color;
     el.style.position = 'absolute';
-    // чтобы длинные имена помещались в токен
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'center';
-    el.style.textAlign = 'center';
-    el.style.fontSize = '11px';
-    el.style.lineHeight = '1.05';
-    el.style.padding = '2px';
-    el.style.boxSizing = 'border-box';
-    el.style.wordBreak = 'break-word';
 
     el.addEventListener('mousedown', () => {
+      // Fog of war: disallow selecting hidden tokens for non-GM
+      try {
+        if (window.FogWar?.isEnabled?.() && !window.FogWar?.canInteractWithToken?.(player)) return;
+      } catch {}
       if (!editEnvironment) {
         if (selectedPlayer) {
           const prev = playerElements.get(selectedPlayer.id);
@@ -346,8 +343,7 @@ function setPlayerPosition(player) {
     el.addEventListener('dblclick', (e) => {
       e.stopPropagation();
 
-      // ВАЖНО: при открытии мини-окна убираем выделение,
-      // чтобы случайный клик по полю не перемещал персонажа.
+      // If token is selected, unselect it to prevent accidental move on board click.
       try {
         if (selectedPlayer && String(selectedPlayer.id) === String(player.id)) {
           const prev = playerElements.get(selectedPlayer.id);
@@ -355,7 +351,6 @@ function setPlayerPosition(player) {
           selectedPlayer = null;
         }
       } catch {}
-
       // block for GM-created public NPCs
       try {
         if (typeof canViewSensitiveInfo === 'function' && !canViewSensitiveInfo(player)) return;
@@ -368,9 +363,9 @@ function setPlayerPosition(player) {
     player.element = el;
   }
 
-  const fullName2 = String(player.name || '').trim();
-  el.textContent = fullName2 || '?';
-  el.title = fullName2 || '';
+  // Update full name label
+  const lbl = el.querySelector('.token-label');
+  if (lbl) lbl.textContent = String(player.name || '?');
   el.style.backgroundColor = player.color;
   el.style.width = `${player.size * 50}px`;
   el.style.height = `${player.size * 50}px`;
@@ -456,6 +451,16 @@ board.addEventListener('click', e => {
   let y = parseInt(cell.dataset.y, 10);
   if (x + selectedPlayer.size > boardWidth) x = boardWidth - selectedPlayer.size;
   if (y + selectedPlayer.size > boardHeight) y = boardHeight - selectedPlayer.size;
+
+  // Fog of war: block movement into hidden cells for non-GM
+  try {
+    if (window.FogWar?.isEnabled?.() && !window.FogWar?.canMoveToCell?.(x, y, selectedPlayer)) {
+      const el = playerElements.get(selectedPlayer.id);
+      if (el) el.classList.remove('selected');
+      selectedPlayer = null;
+      return;
+    }
+  } catch {}
 
   // быстрый локальный чек (сервер всё равно проверит)
   const size = Number(selectedPlayer.size) || 1;

@@ -18,6 +18,20 @@ function createInitialGameState() {
     gridAlpha: 1,
     wallAlpha: 1,
     walls: [],
+    // Fog of war (per map)
+    fog: {
+      enabled: false,
+      mode: 'manual', // 'manual' | 'dynamic'
+      manualBase: 'hide', // 'hide' | 'reveal'
+      // Manual stamps are stored as {x,y,r,mode} in cell coordinates (r in cells)
+      manualStamps: [],
+      // Dynamic settings
+      visionRadius: 8,
+      useWalls: true,
+      exploredEnabled: true,
+      // Shared explored cells for the party ("x,y" strings)
+      explored: []
+    },
     playersPos: {} // playerId -> {x,y}
   };
   return {
@@ -33,6 +47,9 @@ function createInitialGameState() {
     boardHeight: base.boardHeight,
     boardBgDataUrl: base.boardBgDataUrl,
     walls: base.walls,
+
+    // Mirror fog from active map for easy access
+    fog: base.fog,
 
     phase: "lobby",
     players: [],
@@ -57,7 +74,31 @@ function ensureStateHasMaps(state) {
       state.maps.forEach(m => { if (m && !m.sectionId) m.sectionId = sid; });
     } else {
       const firstSid = String(state.mapSections[0]?.id || "");
-      state.maps.forEach(m => { if (m && !m.sectionId) m.sectionId = firstSid; });
+    state.maps.forEach(m => {
+      if (m && !m.sectionId) m.sectionId = firstSid;
+      // ensure fog defaults on every map
+      if (m && (!m.fog || typeof m.fog !== 'object')) {
+        m.fog = {
+          enabled: false,
+          mode: 'manual',
+          manualBase: 'hide',
+          manualStamps: [],
+          visionRadius: 8,
+          useWalls: true,
+          exploredEnabled: true,
+          explored: []
+        };
+      } else if (m && m.fog) {
+        if (typeof m.fog.enabled !== 'boolean') m.fog.enabled = false;
+        if (m.fog.mode !== 'manual' && m.fog.mode !== 'dynamic') m.fog.mode = 'manual';
+        if (m.fog.manualBase !== 'hide' && m.fog.manualBase !== 'reveal') m.fog.manualBase = 'hide';
+        if (!Array.isArray(m.fog.manualStamps)) m.fog.manualStamps = [];
+        if (!Number.isFinite(Number(m.fog.visionRadius))) m.fog.visionRadius = 8;
+        if (typeof m.fog.useWalls !== 'boolean') m.fog.useWalls = true;
+        if (typeof m.fog.exploredEnabled !== 'boolean') m.fog.exploredEnabled = true;
+        if (!Array.isArray(m.fog.explored)) m.fog.explored = [];
+      }
+    });
     }
     state.schemaVersion = Math.max(Number(state.schemaVersion) || 0, 3);
     return state;
@@ -76,6 +117,16 @@ function ensureStateHasMaps(state) {
     gridAlpha: (typeof state.gridAlpha !== 'undefined') ? state.gridAlpha : 1,
     wallAlpha: (typeof state.wallAlpha !== 'undefined') ? state.wallAlpha : 1,
     walls: Array.isArray(state.walls) ? state.walls : [],
+    fog: (state.fog && typeof state.fog === 'object') ? state.fog : {
+      enabled: false,
+      mode: 'manual',
+      manualBase: 'hide',
+      manualStamps: [],
+      visionRadius: 8,
+      useWalls: true,
+      exploredEnabled: true,
+      explored: []
+    },
     playersPos: {}
   };
 
@@ -97,6 +148,9 @@ function ensureStateHasMaps(state) {
   state.gridAlpha = migratedMap.gridAlpha ?? 1;
   state.wallAlpha = migratedMap.wallAlpha ?? 1;
   state.walls = migratedMap.walls;
+
+  // keep root mirror
+  state.fog = migratedMap.fog;
 
   return state;
 }
@@ -120,6 +174,10 @@ function syncActiveToMap(state) {
   m.wallAlpha = (typeof st.wallAlpha !== 'undefined') ? st.wallAlpha : 1;
 
   m.walls = Array.isArray(st.walls) ? st.walls : [];
+
+  // sync fog (root mirror -> map)
+  if (!m.fog || typeof m.fog !== 'object') m.fog = {};
+  if (st.fog && typeof st.fog === 'object') m.fog = deepClone(st.fog);
 
   // capture positions from root players into map snapshot
   const pos = {};
@@ -149,6 +207,16 @@ function loadMapToRoot(state, mapId) {
   st.wallAlpha = (typeof m.wallAlpha !== 'undefined') ? m.wallAlpha : 1;
 
   st.walls = Array.isArray(m.walls) ? m.walls : [];
+  st.fog = (m.fog && typeof m.fog === 'object') ? deepClone(m.fog) : {
+    enabled: false,
+    mode: 'manual',
+    manualBase: 'hide',
+    manualStamps: [],
+    visionRadius: 8,
+    useWalls: true,
+    exploredEnabled: true,
+    explored: []
+  };
 
   // apply stored positions for this map
   const pos = (m.playersPos && typeof m.playersPos === "object") ? m.playersPos : {};
@@ -1143,6 +1211,58 @@ else if (type === "addWall") {
           const a = Number(msg.alpha);
           next.wallAlpha = Number.isFinite(a) ? clamp(a, 0, 1) : 1;
           logEventToState(next, `Прозрачность стен: ${Math.round((1 - next.wallAlpha) * 100)}%`);
+        }
+
+        // ===== Fog of war (GM controls) =====
+        else if (type === "setFogSettings") {
+          if (!isGM) return;
+          if (!next.fog || typeof next.fog !== 'object') next.fog = {};
+          const f = next.fog;
+          if (typeof msg.enabled === 'boolean') f.enabled = msg.enabled;
+          if (msg.mode === 'manual' || msg.mode === 'dynamic') f.mode = msg.mode;
+          if (msg.manualBase === 'hide' || msg.manualBase === 'reveal') f.manualBase = msg.manualBase;
+          if (Number.isFinite(Number(msg.visionRadius))) f.visionRadius = clamp(Number(msg.visionRadius), 1, 60);
+          if (typeof msg.useWalls === 'boolean') f.useWalls = msg.useWalls;
+          if (typeof msg.exploredEnabled === 'boolean') f.exploredEnabled = msg.exploredEnabled;
+          if (!Array.isArray(f.manualStamps)) f.manualStamps = [];
+          if (!Array.isArray(f.explored)) f.explored = [];
+          logEventToState(next, `Туман войны: ${f.enabled ? 'ВКЛ' : 'ВЫКЛ'} (${f.mode === 'dynamic' ? 'динамический' : 'ручной'})`);
+        }
+
+        else if (type === "fogStamp") {
+          if (!isGM) return;
+          if (!next.fog || typeof next.fog !== 'object') next.fog = { enabled: true, mode: 'manual', manualBase: 'hide', manualStamps: [], visionRadius: 8, useWalls: true, exploredEnabled: true, explored: [] };
+          const f = next.fog;
+          if (!Array.isArray(f.manualStamps)) f.manualStamps = [];
+          const x = Number(msg.x), y = Number(msg.y), r = Number(msg.r);
+          const mode = String(msg.mode || 'reveal');
+          if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r)) return;
+          f.manualStamps.push({ x, y, r: clamp(r, 1, 40), mode: (mode === 'hide' ? 'hide' : 'reveal') });
+        }
+
+        else if (type === "fogFill") {
+          if (!isGM) return;
+          if (!next.fog || typeof next.fog !== 'object') next.fog = {};
+          const f = next.fog;
+          if (String(msg.value) === 'revealAll') f.manualBase = 'reveal';
+          else f.manualBase = 'hide';
+          f.manualStamps = [];
+          logEventToState(next, `Туман войны: ${f.manualBase === 'reveal' ? 'Открыто всё' : 'Скрыто всё'}`);
+        }
+
+        else if (type === "fogClearExplored") {
+          if (!isGM) return;
+          if (!next.fog || typeof next.fog !== 'object') next.fog = {};
+          next.fog.explored = [];
+          logEventToState(next, 'Туман войны: очищено исследованное');
+        }
+
+        else if (type === "fogSetExplored") {
+          // GM updates shared explored cells (array of "x,y")
+          if (!isGM) return;
+          if (!next.fog || typeof next.fog !== 'object') next.fog = {};
+          const arr = Array.isArray(msg.cells) ? msg.cells.map(String) : [];
+          next.fog.explored = arr;
         }
 
 
