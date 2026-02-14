@@ -35,6 +35,14 @@
   background-size: 100% 100%;
 }
 
+/* Fog of war overlay (covers cells + tokens for players) */
+#fog-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
 /* Когда есть подложка — делаем клетки полупрозрачными, но линии (outline) видны */
 #game-board.has-bg .cell {
   background-color: rgba(42, 42, 42, var(--grid-alpha, 0.35));

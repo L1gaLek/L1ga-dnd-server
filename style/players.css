@@ -113,6 +113,24 @@
   border: 2px solid #888;
   box-sizing: border-box;
   z-index: 2;
+  overflow: visible;
+}
+
+.player .token-label {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, 4px);
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  line-height: 1.1;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.55);
+  pointer-events: none;
 }
 
 .player.selected {

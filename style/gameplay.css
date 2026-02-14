@@ -1,6 +1,32 @@
 /* Auto-split from style.css — do not edit here if you still maintain the monolith. */
 /* Section: gameplay */
 
+/* Fog controls (GM: environment editor) */
+.fog-controls {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255,255,255,0.25);
+}
+.fog-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.fog-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.fog-row button {
+  flex: 1 1 auto;
+}
+.fog-inline {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
 :root{
   /* единая геометрия левой колонки */
   --left-gap: 16px;
