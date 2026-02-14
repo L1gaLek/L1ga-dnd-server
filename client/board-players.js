@@ -322,17 +322,24 @@ function setPlayerPosition(player) {
   if (!el) {
     el = document.createElement('div');
     el.classList.add('player');
-    // Full name label (instead of first letter)
+    // Имя внутри токена
     el.innerHTML = `<span class="token-label"></span>`;
     const lbl0 = el.querySelector('.token-label');
     if (lbl0) lbl0.textContent = String(player.name || '?');
     el.style.backgroundColor = player.color;
     el.style.position = 'absolute';
 
+    // IMPORTANT: не замыкаем "player" из первой отрисовки —
+    // при обновлениях state объекты игроков пересоздаются, и старый объект становится "устаревшим".
+    // Это ломало выбор/движение (у пользователей переставало двигаться после пары ходов).
+    const pid = String(player.id);
+
     el.addEventListener('mousedown', () => {
+      const cur = players.find(pp => String(pp?.id) === pid) || player;
+
       // Fog of war: disallow selecting hidden tokens for non-GM
       try {
-        if (window.FogWar?.isEnabled?.() && !window.FogWar?.canInteractWithToken?.(player)) return;
+        if (window.FogWar?.isEnabled?.() && !window.FogWar?.canInteractWithToken?.(cur)) return;
       } catch {}
 
       // If this is a "ghost" (last known) token in exploration, do not allow selecting it.
@@ -345,7 +352,7 @@ function setPlayerPosition(player) {
           const prev = playerElements.get(selectedPlayer.id);
           if (prev) prev.classList.remove('selected');
         }
-        selectedPlayer = player;
+        selectedPlayer = cur;
         el.classList.add('selected');
       }
     });
@@ -354,9 +361,11 @@ function setPlayerPosition(player) {
     el.addEventListener('dblclick', (e) => {
       e.stopPropagation();
 
+      const cur = players.find(pp => String(pp?.id) === pid) || player;
+
       // If token is selected, unselect it to prevent accidental move on board click.
       try {
-        if (selectedPlayer && String(selectedPlayer.id) === String(player.id)) {
+        if (selectedPlayer && String(selectedPlayer.id) === pid) {
           const prev = playerElements.get(selectedPlayer.id);
           if (prev) prev.classList.remove('selected');
           selectedPlayer = null;
@@ -364,9 +373,9 @@ function setPlayerPosition(player) {
       } catch {}
       // block for GM-created public NPCs
       try {
-        if (typeof canViewSensitiveInfo === 'function' && !canViewSensitiveInfo(player)) return;
+        if (typeof canViewSensitiveInfo === 'function' && !canViewSensitiveInfo(cur)) return;
       } catch {}
-      openTokenMini(player.id);
+      openTokenMini(cur.id);
     });
 
     board.appendChild(el);
@@ -387,7 +396,7 @@ function setPlayerPosition(player) {
   const fog = st?.fog || {};
   const phase = String(st?.phase || '').trim();
   const asPlayerView = (String(myRole || '') !== 'GM') || (String(myRole || '') === 'GM' && String(fog.gmViewMode || 'gm') === 'player');
-  const ownerRole = String(player?.ownerRole || '').trim();
+  const ownerRole = getOwnerRoleForToken(player);
   const isGmHidden = (ownerRole === 'GM' && !player.isAlly);
 
   // Reset ghost flag by default
@@ -421,7 +430,8 @@ function setPlayerPosition(player) {
 
     const visibleNow = isAnyCellVisibleDynamicOnly(player.x, player.y, size);
 
-    const key = String(player.id);
+    const mapId = getCurrentMapIdSafe();
+    const key = `${mapId || 'map'}:${String(player.id)}`;
     if (visibleNow) {
       window._fogLastKnown.set(key, { x: Number(player.x) || 0, y: Number(player.y) || 0 });
     }

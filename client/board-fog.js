@@ -428,8 +428,9 @@
         const isGm = (typeof myRole !== 'undefined' && String(myRole) === 'GM');
         const gmView = String(fog?.gmViewMode || 'gm');
         if (isGm && gmView !== 'player' && String(fog.mode || '') === 'dynamic' && this._dynNpcVisible && this._dynNpcVisible.length === wCells * hCells) {
-          // Soft "almost white" tint with a slight red hue (requested)
-          ctx.fillStyle = 'rgba(255,245,245,0.18)';
+          // Очень светлый оттенок (почти белый) с еле заметным красным подтоном.
+          // Делает обзор ГМ-персонажей менее "красным", но всё ещё различимым.
+          ctx.fillStyle = 'rgba(255,250,250,0.16)';
           for (let i = 0; i < this._dynNpcVisible.length; i++) {
             if (this._dynNpcVisible[i] !== 1) continue;
             const x = i % wCells;

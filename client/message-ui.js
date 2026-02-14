@@ -217,7 +217,20 @@ loginDiv.style.display = 'none';
         if (!existingIds.has(id)) {
           el.remove();
           playerElements.delete(id);
-          try { window._fogLastKnown?.delete?.(String(id)); } catch {}
+          // очищаем last-known кэш для всех карт (ключи вида "<mapId>:<playerId>")
+          try {
+            const pid = String(id);
+            const m = window._fogLastKnown;
+            if (m && typeof m.forEach === 'function') {
+              const toDel = [];
+              m.forEach((_, k) => {
+                if (String(k).endsWith(`:${pid}`)) toDel.push(k);
+              });
+              toDel.forEach(k => { try { m.delete(k); } catch {} });
+            } else {
+              window._fogLastKnown?.delete?.(String(id));
+            }
+          } catch {}
         }
       });
 
