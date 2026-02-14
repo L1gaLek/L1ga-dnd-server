@@ -403,11 +403,23 @@ function setPlayerPosition(player) {
       return;
     }
 
-    const size = Number(player?.size) || 1;
-    const cx = (Number(player.x) || 0) + Math.floor((size - 1) / 2);
-    const cy = (Number(player.y) || 0) + Math.floor((size - 1) / 2);
+    const size = Math.max(1, Number(player?.size) || 1);
+
     // In exploration, discovery depends ONLY on dynamic vision (manual reveal should NOT auto-detect hidden GM tokens).
-    const visibleNow = !!window.FogWar?.isCellVisibleDynamicOnly?.(cx, cy);
+    // IMPORTANT: for large tokens, ANY occupied cell being in vision counts as discovery/visibility.
+    const isAnyCellVisibleDynamicOnly = (px, py, ps) => {
+      const sx = Number(px) || 0;
+      const sy = Number(py) || 0;
+      const ss = Math.max(1, Number(ps) || 1);
+      for (let dy = 0; dy < ss; dy++) {
+        for (let dx = 0; dx < ss; dx++) {
+          if (window.FogWar?.isCellVisibleDynamicOnly?.(sx + dx, sy + dy)) return true;
+        }
+      }
+      return false;
+    };
+
+    const visibleNow = isAnyCellVisibleDynamicOnly(player.x, player.y, size);
 
     const key = String(player.id);
     if (visibleNow) {
@@ -418,10 +430,7 @@ function setPlayerPosition(player) {
     // If players can currently SEE the last-known cell (dynamic vision), but the token isn't there anymore,
     // then the "ghost" must disappear (they verify it's gone).
     if (!visibleNow && known) {
-      const kSize = Number(player?.size) || 1;
-      const kcx = (Number(known.x) || 0) + Math.floor((kSize - 1) / 2);
-      const kcy = (Number(known.y) || 0) + Math.floor((kSize - 1) / 2);
-      const lastCellVisibleNow = !!window.FogWar?.isCellVisibleDynamicOnly?.(kcx, kcy);
+      const lastCellVisibleNow = isAnyCellVisibleDynamicOnly(known.x, known.y, size);
       const tokenStillOnLastKnown = (Number(player.x) === Number(known.x) && Number(player.y) === Number(known.y));
       if (lastCellVisibleNow && !tokenStillOnLastKnown) {
         window._fogLastKnown.delete(key);

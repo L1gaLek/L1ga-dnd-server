@@ -428,7 +428,8 @@
         const isGm = (typeof myRole !== 'undefined' && String(myRole) === 'GM');
         const gmView = String(fog?.gmViewMode || 'gm');
         if (isGm && gmView !== 'player' && String(fog.mode || '') === 'dynamic' && this._dynNpcVisible && this._dynNpcVisible.length === wCells * hCells) {
-          ctx.fillStyle = 'rgba(255,0,0,0.18)';
+          // Soft "almost white" tint with a slight red hue (requested)
+          ctx.fillStyle = 'rgba(255,245,245,0.18)';
           for (let i = 0; i < this._dynNpcVisible.length; i++) {
             if (this._dynNpcVisible[i] !== 1) continue;
             const x = i % wCells;
