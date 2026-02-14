@@ -64,6 +64,17 @@ function getQuickSheetStats(player) {
   return { hpMax, hpCur, ac, speed, lvl, stats };
 }
 
+// Sensitive UI (HP bar + dblclick mini + sheet open) must be available only for:
+// - GM
+// - owner of the character
+// - allies (GM flagged as ally)
+function canAccessSensitivePlayerUI(player) {
+  if (!player) return false;
+  if (myRole === 'GM') return true;
+  if (String(player.ownerId) === String(myId)) return true;
+  return !!player.isAlly;
+}
+
 function ensureSheetPath(sheetObj, path) {
   const parts = String(path || '').split('.').filter(Boolean);
   let cur = sheetObj;
@@ -97,6 +108,12 @@ function updateHpBar(player, tokenEl) {
   const pid = String(player?.id || '');
   if (!pid) return;
   let bar = hpBarElements.get(pid);
+
+  // If current user must NOT see HP for this token — just hide the bar.
+  if (!canAccessSensitivePlayerUI(player)) {
+    if (bar) bar.style.display = 'none';
+    return;
+  }
 
   const size = Number(player?.size) || 1;
 
@@ -173,6 +190,7 @@ function positionTokenMini(tokenEl) {
 function openTokenMini(playerId) {
   const p = players.find(pp => String(pp?.id) === String(playerId));
   if (!p) return;
+  if (!canAccessSensitivePlayerUI(p)) return;
   const tokenEl = playerElements.get(p.id);
   if (!tokenEl || tokenEl.style.display === 'none') return;
 

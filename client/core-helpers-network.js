@@ -877,6 +877,11 @@ async function sendMessage(msg) {
           const mapId = (ownerRole === "GM" && !isBase && !player.isAlly)
             ? (activeMapId || null)
             : null;
+
+          // GM public visibility toggle ("eye" in GM list):
+          // - Bases and Allies are always public.
+          // - Other GM-created characters are hidden by default; GM can toggle per-character.
+          const gmPublic = (ownerRole === "GM") ? (!!isBase || !!player.isAlly) : true;
           if (isBase) {
             const exists = (next.players || []).some(p => p.isBase && p.ownerId === myUserId);
             if (exists) {
@@ -903,10 +908,25 @@ async function sendMessage(msg) {
             ownerId: myUserId,
             ownerRole,
             mapId,
+            gmPublic,
             ownerName: myNameSpan?.textContent || "",
             sheet: player.sheet || { parsed: { name: { value: player.name } } }
           });
           logEventToState(next, `${isMonster ? 'Добавлен монстр' : 'Добавлен игрок'} ${player.name}`);
+        }
+
+        else if (type === "setGmPublic") {
+          // GM toggles visibility of their own non-base non-ally NPCs/monsters for other players.
+          if (!isGM) return;
+          const pid = String(msg.id || "");
+          const p = (next.players || []).find(pp => String(pp?.id) === pid);
+          if (!p) return;
+          if (String(p.ownerId) !== String(myUserId)) return;
+          const ownerRole = String(p.ownerRole || "").trim();
+          if (ownerRole !== 'GM') return;
+          if (p.isBase || p.isAlly) return; // bases/allies are always visible
+          p.gmPublic = !!msg.gmPublic;
+          logEventToState(next, `${p.name}: видимость для игроков ${p.gmPublic ? 'включена' : 'выключена'}`);
         }
 
         else if (type === "combatInitChoice") {

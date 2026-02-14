@@ -28,13 +28,25 @@ function handleMessage(msg) {
       return true;
     }
 
-    // Non-GM: hide GM-created unless ally.
-    if (ownerRole === 'GM' && !p.isAlly) return false;
+    // Non-GM: GM-created are visible only if:
+    // - ally/base: always visible
+    // - otherwise: only when GM opened the "eye" (gmPublic)
+    if (ownerRole === 'GM') {
+      if (p.isAlly || p.isBase) return true;
+      if (!p.gmPublic) return false;
+    }
 
-    // Safety: if a GM-created map-local somehow leaked as visible, still gate by map.
+    // Map-local gate (GM NPCs/monsters are scoped per map unless ally/base).
     const pidMap = String(p?.mapId || '').trim();
-    if (ownerRole === 'GM' && pidMap && curMapId && pidMap !== curMapId && !p.isAlly) return false;
+    if (ownerRole === 'GM' && pidMap && curMapId && pidMap !== curMapId && !p.isAlly && !p.isBase) return false;
     return true;
+  }
+
+  function canAccessSensitivePlayerUI(p) {
+    if (!p) return false;
+    if (myRole === 'GM') return true;
+    if (String(p.ownerId) === String(myId)) return true;
+    return !!p.isAlly; // allies are "trusted" for HP / sheet / dblclick mini
   }
 
 // ===== Rooms lobby messages =====
@@ -564,7 +576,8 @@ function updatePlayerList() {
       // ===== Верхняя кнопка "Лист персонажа" (на всю ширину карточки) =====
       const topActions = document.createElement('div');
       topActions.className = 'player-actions-top';
-      if (!p.isMonster) {
+      // Players can open sheet only for: their own chars, allies, or if they are GM.
+      if (!p.isMonster && canAccessSensitivePlayerUI(p)) {
         const sheetBtn = document.createElement('button');
         sheetBtn.textContent = 'Лист персонажа';
         sheetBtn.className = 'sheet-btn';
@@ -639,6 +652,24 @@ function updatePlayerList() {
           sendMessage({ type: 'updatePlayerColor', id: p.id, color: colorInput.value });
         });
         midRow.appendChild(colorInput);
+      }
+
+      // "Глаз" видимости (только для ГМ, и только для его собственных не-основа/не-союзник)
+      if (myRole === 'GM') {
+        const ownerRole = getOwnerRoleForPlayer(p);
+        const isMine = String(p.ownerId) === String(myId);
+        if (ownerRole === 'GM' && isMine && !p.isBase && !p.isAlly) {
+          const eyeBtn = document.createElement('button');
+          eyeBtn.classList.add('mini-action-btn','mini-action-btn--secondary','eye-btn');
+          const opened = !!p.gmPublic;
+          eyeBtn.textContent = opened ? '👁' : '🙈';
+          eyeBtn.title = opened ? 'Видно игрокам (без HP/листа/двойного клика)' : 'Скрыто от игроков';
+          eyeBtn.onclick = (e) => {
+            e.stopPropagation();
+            sendMessage({ type: 'setGmPublic', id: p.id, gmPublic: !opened });
+          };
+          midRow.appendChild(eyeBtn);
+        }
       }
       // Быстрые кнопки: "С поля" / "Удалить" — в один ряд с размером/цветом
       if (myRole === "GM" || p.ownerId === myId) {
